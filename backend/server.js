@@ -21,6 +21,7 @@ const checkinRoutes = require('./routes/checkin');
 const publicRoutes = require('./routes/public');
 
 const app = express();
+app.set('trust proxy', 1); 
 const server = http.createServer(app);
 
 connectDB();
