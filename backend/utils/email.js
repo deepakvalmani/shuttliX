@@ -1,39 +1,41 @@
-const nodemailer = require('nodemailer');
-
-const createTransporter = () => nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
-  port: parseInt(process.env.EMAIL_PORT || '587'),
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
-});
+const https = require('https');
 
 const sendEmail = async ({ to, subject, text, html }) => {
-  const transporter = createTransporter();
-  try {
-    // Verify connection first
-    await transporter.verify();
-    const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || '"ShutliX" <noreply@shuttlix.com>',
-      to,
-      subject,
-      text,
-      html,
+  const payload = JSON.stringify({
+    from: process.env.EMAIL_FROM || 'ShutliX <onboarding@resend.dev>',
+    to: [to],
+    subject,
+    html: html || `<p>${text}</p>`,
+  });
+
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.resend.com',
+      path: '/emails',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        const parsed = JSON.parse(data);
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log(`📧 Email sent to ${to}: ${parsed.id}`);
+          resolve(parsed);
+        } else {
+          console.error('❌ Email error:', parsed);
+          reject(new Error(parsed.message || 'Email failed'));
+        }
+      });
     });
-    console.log(`📧 Email sent to ${to}: ${info.messageId}`);
-    return info;
-  } catch (err) {
-    console.error('❌ Email error:', err.message);
-    throw err;
-  }
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
 };
 
 module.exports = sendEmail;
