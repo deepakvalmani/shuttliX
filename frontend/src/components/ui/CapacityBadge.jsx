@@ -50,7 +50,7 @@ const CapacityBadge = ({ current = 0, total = 1, showBar = true, size = 'md' }) 
           width: '100%',
           height: isSmall ? 4 : 5,
           borderRadius: 99,
-          background: 'var(--surface-4)',
+          background: 'var(--glass-1)',
           overflow: 'hidden',
         }}>
           <div style={{

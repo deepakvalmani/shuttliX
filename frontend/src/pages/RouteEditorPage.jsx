@@ -159,9 +159,9 @@ const RouteEditorPage = () => {
     }));
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background:'var(--surface-1)' }}>
+    <div className="min-h-screen flex flex-col" style={{ background:'var(--bg-layer1)' }}>
       <div className="flex-shrink-0 px-5 py-4 flex items-center gap-4"
-        style={{ background:'var(--surface-2)', borderBottom:'1px solid var(--border)' }}>
+        style={{ background:'var(--glass-2)', borderBottom:'1px solid var(--border)' }}>
         <button onClick={() => navigate('/admin')} className="btn-ghost btn-icon"><ArrowLeft size={18}/></button>
         <div className="flex-1">
           <h1 className="font-display font-bold text-lg" style={{ color:'var(--text-1)' }}>
@@ -170,17 +170,17 @@ const RouteEditorPage = () => {
           <p className="text-xs" style={{ color:'var(--text-3)' }}>Click stop markers to add/remove from route</p>
         </div>
         <button onClick={handleSave} disabled={isSaving} className="btn-primary gap-2">
-          {isSaving ? <span className="dot-loader"><span/><span/><span/></span> : <><Save size={15}/>Save Route</>}
+          {isSaving ? <span className="loader"><span/><span/><span/></span> : <><Save size={15}/>Save Route</>}
         </button>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel */}
         <div className="w-80 flex-shrink-0 overflow-y-auto p-4 space-y-4"
-          style={{ background:'var(--surface-2)', borderRight:'1px solid var(--border)' }}>
-          {isLoading ? <div className="flex justify-center py-12"><div className="dot-loader"><span/><span/><span/></div></div> : (
+          style={{ background:'var(--glass-2)', borderRight:'1px solid var(--border)' }}>
+          {isLoading ? <div className="flex justify-center py-12"><div className="loader"><span/><span/><span/></div></div> : (
             <>
-              <div className="rounded-xl p-4" style={{ background:'var(--surface-3)', border:'1px solid var(--border)' }}>
+              <div className="rounded-xl p-4" style={{ background:'var(--glass-2)', border:'1px solid var(--border)' }}>
                 <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color:'var(--text-4)' }}>Route Details</p>
                 <div className="space-y-3">
                   <div><label className="label">Route name *</label>
@@ -203,7 +203,7 @@ const RouteEditorPage = () => {
                 </div>
               </div>
 
-              <div className="rounded-xl p-4" style={{ background:'var(--surface-3)', border:'1px solid var(--border)' }}>
+              <div className="rounded-xl p-4" style={{ background:'var(--glass-2)', border:'1px solid var(--border)' }}>
                 <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color:'var(--text-4)' }}>
                   Stops ({selectedStops.length})
                 </p>
@@ -213,7 +213,7 @@ const RouteEditorPage = () => {
                   <div className="space-y-1.5">
                     {selectedStops.map((stop, idx) => (
                       <div key={stop._id} className="flex items-center gap-2 px-2 py-2 rounded-lg"
-                        style={{ background:'var(--surface-2)' }}>
+                        style={{ background:'var(--glass-2)' }}>
                         <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                           style={{ background:form.color, color:'#fff', fontSize:'9px' }}>{idx+1}</div>
                         <span className="flex-1 text-xs truncate" style={{ color:'var(--text-2)' }}>{stop.name}</span>
@@ -226,7 +226,7 @@ const RouteEditorPage = () => {
                 )}
               </div>
 
-              <div className="rounded-xl p-4" style={{ background:'var(--surface-3)', border:'1px solid var(--border)' }}>
+              <div className="rounded-xl p-4" style={{ background:'var(--glass-2)', border:'1px solid var(--border)' }}>
                 <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color:'var(--text-4)' }}>Schedule</p>
                 {schedule.map((sched, idx) => (
                   <div key={idx} className="space-y-3">
@@ -235,7 +235,7 @@ const RouteEditorPage = () => {
                         {DAYS.map(day => (
                           <button key={day} onClick={()=>toggleDay(idx,day)}
                             className="px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
-                            style={{ background:sched.days.includes(day)?form.color:'var(--surface-4)', color:sched.days.includes(day)?'#fff':'var(--text-3)' }}>
+                            style={{ background:sched.days.includes(day)?form.color:'var(--glass-1)', color:sched.days.includes(day)?'#fff':'var(--text-3)' }}>
                             {day}
                           </button>
                         ))}

@@ -6,13 +6,12 @@ import {
   Save, Eye, EyeOff, Star, CheckCircle, Trash2,
 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
-import { requestNotificationPermission } from '../services/firebase';
+// Firebase notifications not configured
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
 const SectionCard = ({ title, icon: Icon, iconColor = 'var(--brand)', children }) => (
-  <div className="rounded-2xl overflow-hidden"
-    style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+  <div className="glass-md rounded-2xl overflow-hidden">
     <div className="flex items-center gap-2.5 px-5 py-4"
       style={{ borderBottom: '1px solid var(--border)' }}>
       <Icon size={17} style={{ color: iconColor }} />
@@ -32,7 +31,7 @@ const TogglePref = ({ label, description, value, onChange }) => (
     <button
       onClick={() => onChange(!value)}
       className="flex-shrink-0 w-11 h-6 rounded-full relative transition-colors duration-200"
-      style={{ background: value ? 'var(--brand)' : 'var(--surface-4)' }}>
+      style={{ background: value ? 'var(--brand)' : 'var(--glass-1)' }}>
       <span
         className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
         style={{ transform: value ? 'translateX(22px)' : 'translateX(2px)' }} />
@@ -114,7 +113,7 @@ const ProfilePage = () => {
   };
 
   const handleEnableNotifications = async () => {
-    const token = await requestNotificationPermission();
+    const token = null;
     if (token) {
       setNotifPermission('granted');
       toast.success('Push notifications enabled!');
@@ -144,10 +143,10 @@ const ProfilePage = () => {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--navy)' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-base)' }}>
       {/* Header */}
       <div className="flex-shrink-0 px-5 py-4 flex items-center gap-4"
-        style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+        style={{ background: 'var(--glass-2)', borderBottom: '1px solid var(--border)' }}>
         <button onClick={() => navigate('/student')} className="btn-ghost btn-icon">
           <ArrowLeft size={18} />
         </button>
@@ -166,7 +165,7 @@ const ProfilePage = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar nav */}
         <div className="hidden sm:flex flex-col flex-shrink-0 py-4 gap-1"
-          style={{ width: 200, background: 'var(--surface-2)', borderRight: '1px solid var(--border)' }}>
+          style={{ width: 200, background: 'var(--glass-2)', borderRight: '1px solid var(--border)' }}>
           {SECTIONS.map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setActiveSection(key)}
               className="flex items-center gap-3 mx-3 px-3 py-2.5 rounded-xl text-sm transition-all"
@@ -183,7 +182,7 @@ const ProfilePage = () => {
 
         {/* Mobile tabs */}
         <div className="sm:hidden fixed bottom-0 left-0 right-0 z-10 flex"
-          style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}>
+          style={{ background: 'var(--glass-2)', borderTop: '1px solid var(--border)' }}>
           {SECTIONS.map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setActiveSection(key)}
               className="flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs"
@@ -201,7 +200,7 @@ const ProfilePage = () => {
             <>
               {/* Avatar */}
               <div className="flex items-center gap-4 p-5 rounded-2xl"
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                style={{ background: 'var(--glass-2)', border: '1px solid var(--border)' }}>
                 <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold flex-shrink-0"
                   style={{ background: 'var(--brand)', color: '#fff' }}>
                   {user?.name?.charAt(0)?.toUpperCase()}
@@ -246,7 +245,7 @@ const ProfilePage = () => {
                   <button onClick={handleSaveProfile} disabled={isSavingProfile}
                     className="btn-primary w-full gap-2">
                     {isSavingProfile
-                      ? <span className="dot-loader"><span /><span /><span /></span>
+                      ? <span className="loader"><span /><span /><span /></span>
                       : <><Save size={15} /> Save changes</>}
                   </button>
                 </div>
@@ -264,7 +263,7 @@ const ProfilePage = () => {
                       <div key={trip._id} className="flex items-center gap-3 py-2"
                         style={{ borderBottom: '1px solid var(--border)' }}>
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                          style={{ background: 'var(--surface-3)' }}>
+                          style={{ background: 'var(--glass-2)' }}>
                           <Star size={14} style={{ color: '#D97706' }} />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -288,7 +287,7 @@ const ProfilePage = () => {
             <SectionCard title="Push Notifications" icon={Bell}>
               {/* Permission status */}
               <div className="mb-5 p-4 rounded-xl"
-                style={{ background: 'var(--surface-3)', border: '1px solid var(--border)' }}>
+                style={{ background: 'var(--glass-2)', border: '1px solid var(--border)' }}>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>
@@ -329,7 +328,7 @@ const ProfilePage = () => {
               <button onClick={handleSaveProfile} disabled={isSavingProfile}
                 className="btn-primary w-full mt-5 gap-2">
                 {isSavingProfile
-                  ? <span className="dot-loader"><span /><span /><span /></span>
+                  ? <span className="loader"><span /><span /><span /></span>
                   : <><Save size={15} /> Save preferences</>}
               </button>
             </SectionCard>
@@ -352,7 +351,7 @@ const ProfilePage = () => {
                     return (
                       <div key={stop._id}
                         className="flex items-center gap-3 px-3 py-3 rounded-xl"
-                        style={{ background: isFav ? 'rgba(217,119,6,0.08)' : 'var(--surface-3)', border: `1px solid ${isFav ? 'rgba(217,119,6,0.3)' : 'var(--border)'}` }}>
+                        style={{ background: isFav ? 'rgba(217,119,6,0.08)' : 'var(--glass-2)', border: `1px solid ${isFav ? 'rgba(217,119,6,0.3)' : 'var(--border-1)'}` }}>
                         <MapPin size={15} style={{ color: isFav ? '#D97706' : 'var(--text-4)' }} className="flex-shrink-0" />
                         <span className="flex-1 text-sm" style={{ color: 'var(--text-1)' }}>{stop.name}</span>
                         <button onClick={() => toggleFavoriteStop(stop._id)}
@@ -406,7 +405,7 @@ const ProfilePage = () => {
                 <button onClick={handleSavePassword} disabled={isSavingPassword}
                   className="btn-primary w-full gap-2">
                   {isSavingPassword
-                    ? <span className="dot-loader"><span /><span /><span /></span>
+                    ? <span className="loader"><span /><span /><span /></span>
                     : <><Lock size={15} /> Update password</>}
                 </button>
               </div>

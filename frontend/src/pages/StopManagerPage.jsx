@@ -195,9 +195,9 @@ const StopManagerPage = () => {
   const isEditing = !!(selectedStop || pendingStop);
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background:'var(--surface-1)' }}>
+    <div className="min-h-screen flex flex-col" style={{ background:'var(--bg-layer1)' }}>
       <div className="flex-shrink-0 px-5 py-4 flex items-center gap-4"
-        style={{ background:'var(--surface-2)', borderBottom:'1px solid var(--border)' }}>
+        style={{ background:'var(--glass-2)', borderBottom:'1px solid var(--border)' }}>
         <button onClick={()=>navigate('/admin')} className="btn-ghost btn-icon"><ArrowLeft size={18}/></button>
         <div className="flex-1">
           <h1 className="font-display font-bold text-lg" style={{ color:'var(--text-1)' }}>Stop Manager</h1>
@@ -209,7 +209,7 @@ const StopManagerPage = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <div className="w-80 flex-shrink-0 flex flex-col"
-          style={{ background:'var(--surface-2)', borderRight:'1px solid var(--border)' }}>
+          style={{ background:'var(--glass-2)', borderRight:'1px solid var(--border)' }}>
           {/* Search */}
           <div className="p-4 relative" style={{ borderBottom:'1px solid var(--border)' }}>
             <div className="flex gap-2">
@@ -220,16 +220,16 @@ const StopManagerPage = () => {
                   onChange={e=>handleSearchInput(e.target.value)}
                   onKeyDown={handleSearchEnter}/>
               </div>
-              {isSearching && <div className="flex items-center"><div className="dot-loader"><span/><span/><span/></div></div>}
+              {isSearching && <div className="flex items-center"><div className="loader"><span/><span/><span/></div></div>}
             </div>
             {showResults && searchResults.length > 0 && (
               <div className="absolute top-full left-4 right-4 z-[2000] mt-1 rounded-xl overflow-hidden"
-                style={{ background:'var(--surface-3)', border:'1px solid var(--border-md)', boxShadow:'0 8px 24px rgba(0,0,0,0.4)', maxHeight:240, overflowY:'auto' }}>
+                style={{ background:'var(--glass-2)', border:'1px solid var(--border-2)', boxShadow:'0 8px 24px rgba(0,0,0,0.4)', maxHeight:240, overflowY:'auto' }}>
                 {searchResults.map((r,i) => (
                   <button key={i} onClick={()=>selectSearchResult(r)}
                     className="w-full text-left px-4 py-2.5 text-sm transition-colors"
                     style={{ borderBottom:'1px solid var(--border)' }}
-                    onMouseEnter={e=>e.currentTarget.style.background='var(--surface-4)'}
+                    onMouseEnter={e=>e.currentTarget.style.background='var(--glass-1)'}
                     onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                     <div className="font-medium" style={{ color:'var(--text-1)' }}>{r.label}</div>
                     {r.sublabel && <div className="text-xs mt-0.5" style={{ color:'var(--text-3)' }}>{r.sublabel}</div>}
@@ -264,7 +264,7 @@ const StopManagerPage = () => {
                     {FACILITIES.map(fac => (
                       <button key={fac} onClick={()=>toggleFacility(fac)}
                         className="text-xs px-2 py-1 rounded-lg capitalize transition-all"
-                        style={{ background:stopFacilities.includes(fac)?'rgba(26,86,219,0.2)':'var(--surface-4)', border:`1px solid ${stopFacilities.includes(fac)?'var(--brand)':'var(--border)'}`, color:stopFacilities.includes(fac)?'var(--brand)':'var(--text-3)' }}>
+                        style={{ background:stopFacilities.includes(fac)?'rgba(26,86,219,0.2)':'var(--glass-1)', border:`1px solid ${stopFacilities.includes(fac)?'var(--brand)':'var(--border-1)'}`, color:stopFacilities.includes(fac)?'var(--brand)':'var(--text-3)' }}>
                         {fac}
                       </button>
                     ))}
@@ -275,7 +275,7 @@ const StopManagerPage = () => {
                     className="btn-secondary flex-1 btn-sm">Cancel</button>
                   {selectedStop && <button onClick={()=>deleteStop(selectedStop._id)} className="btn-danger btn-sm"><Trash2 size={13}/></button>}
                   <button onClick={saveStop} disabled={isSaving||!stopName.trim()} className="btn-primary flex-1 btn-sm gap-1">
-                    {isSaving ? <span className="dot-loader"><span/><span/><span/></span> : <><Save size={13}/>{selectedStop?'Update':'Save'}</>}
+                    {isSaving ? <span className="loader"><span/><span/><span/></span> : <><Save size={13}/>{selectedStop?'Update':'Save'}</>}
                   </button>
                 </div>
               </div>
@@ -295,7 +295,7 @@ const StopManagerPage = () => {
             ) : stops.map((stop,i) => (
               <button key={stop._id} onClick={()=>{ setSelectedStop(stop); setPendingStop(null); setStopName(stop.name); setStopDesc(stop.description||''); setStopFacilities(stop.facilities||[]); mapInstanceRef.current?.setView([stop.lat,stop.lng],17,{animate:true}); if(pendingMarkerRef.current) pendingMarkerRef.current.remove(); }}
                 className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl mb-1 transition-all"
-                style={{ background:selectedStop?._id===stop._id?'rgba(26,86,219,0.15)':'var(--surface-3)', border:`1px solid ${selectedStop?._id===stop._id?'var(--brand)':'transparent'}` }}
+                style={{ background:selectedStop?._id===stop._id?'rgba(26,86,219,0.15)':'var(--glass-2)', border:`1px solid ${selectedStop?._id===stop._id?'var(--brand)':'transparent'}` }}
                 onMouseEnter={()=>markersRef.current[stop._id]?.openPopup()}
                 onMouseLeave={()=>markersRef.current[stop._id]?.closePopup()}>
                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"

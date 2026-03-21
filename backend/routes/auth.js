@@ -1,59 +1,91 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, validationResult } = require('express-validator');
 const router = express.Router();
-const authController = require('../controllers/authController');
-const { protect } = require('../middleware/auth');
+const auth   = require('../controllers/authController');
+const { protect, restrictTo } = require('../middleware/auth');
 
-// OTP flow for students/drivers
-router.post('/send-otp', body('email').isEmail(), authController.sendOTP);
-router.post('/verify-otp', [
+// ── Validation helper ─────────────────────────────────────
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: errors.array()[0].msg });
+  }
+  next();
+};
+
+// ── OTP flow ─────────────────────────────────────────────
+router.post('/send-otp',
+  body('email').isEmail().withMessage('Valid email required'),
+  body('purpose').isIn(['register', 'reset']).withMessage('purpose must be register or reset'),
+  validate,
+  auth.sendOTP
+);
+
+router.post('/verify-otp',
   body('email').isEmail(),
-  body('otp').isLength({ min: 6, max: 6 }),
-], authController.verifyOTP);
+  body('otp').isLength({ min: 6, max: 6 }).isNumeric(),
+  body('purpose').isIn(['register', 'reset']),
+  validate,
+  auth.verifyOTP
+);
 
-// Student / Driver register (requires OTP)
-router.post('/register', [
-  body('name').trim().notEmpty().isLength({ min: 2, max: 50 }),
+// ── Registration ──────────────────────────────────────────
+router.post('/register',
+  body('name').trim().notEmpty().isLength({ min: 2, max: 60 }),
   body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/),
+  body('password').isLength({ min: 8 }),
   body('role').isIn(['student', 'driver']),
   body('organizationId').notEmpty(),
-], authController.register);
+  body('tempToken').notEmpty(),
+  validate,
+  auth.register
+);
 
-// Admin self-registration (creates org + admin account in one step)
-router.post('/admin-register', [
-  body('adminName').trim().notEmpty().isLength({ min: 2, max: 50 }),
+router.post('/admin-register',
+  body('adminName').trim().notEmpty().isLength({ min: 2, max: 60 }),
   body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/),
+  body('password').isLength({ min: 8 }),
   body('organizationName').trim().notEmpty().isLength({ min: 2, max: 100 }),
-  body('organizationShortName').trim().notEmpty().isLength({ min: 2, max: 20 }),
-], authController.adminRegister);
+  validate,
+  auth.adminRegister
+);
 
-// Login (all roles)
-router.post('/login', [
+// ── Login / session ───────────────────────────────────────
+router.post('/login',
   body('email').isEmail().normalizeEmail(),
   body('password').notEmpty(),
-], authController.login);
+  validate,
+  auth.login
+);
 
-// Lookup org by code or QR (public — used on register page)
-router.get('/org-lookup', authController.orgLookup);
+router.post('/refresh',   auth.refreshToken);
+router.post('/logout',    protect, auth.logout);
 
-// Forgot / reset password
-router.post('/forgot-password', body('email').isEmail(), authController.forgotPassword);
-router.post('/reset-password', [
+// ── Password reset ────────────────────────────────────────
+router.post('/forgot-password',
+  body('email').isEmail(),
+  validate,
+  auth.forgotPassword
+);
+
+router.post('/reset-password',
   body('email').isEmail(),
   body('tempToken').notEmpty(),
-  body('newPassword').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/),
-], authController.resetPassword);
+  body('newPassword').isLength({ min: 8 }),
+  validate,
+  auth.resetPassword
+);
 
-router.post('/refresh', authController.refreshToken);
-router.post('/logout', protect, authController.logout);
-router.get('/me', protect, authController.getMe);
-router.patch('/update-profile', protect, authController.updateProfile);
-router.patch('/change-password', protect, authController.changePassword);
-router.post('/fcm-token', protect, authController.updateFCMToken);
+// ── Org lookup (public) ───────────────────────────────────
+router.get('/org-lookup', auth.orgLookup);
 
-// Admin: regenerate org QR / code
-router.post('/regenerate-org-code', protect, authController.regenerateOrgCode);
+// ── Authenticated endpoints ───────────────────────────────
+router.get('/me',               protect, auth.getMe);
+router.patch('/update-profile', protect, auth.updateProfile);
+router.patch('/change-password',protect, auth.changePassword);
+router.post('/regenerate-org-code',
+  protect, restrictTo('admin', 'superadmin'),
+  auth.regenerateOrgCode
+);
 
 module.exports = router;

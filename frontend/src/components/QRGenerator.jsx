@@ -66,7 +66,7 @@ const QRGenerator = ({ tripId, shuttleId, isActive }) => {
   }
 
   return (
-    <div className="rounded-2xl p-5" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+    <div className="rounded-2xl p-5" style={{ background: 'var(--glass-2)', border: '1px solid var(--border)' }}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <QrCode size={18} style={{ color: 'var(--brand)' }} />
@@ -86,14 +86,14 @@ const QRGenerator = ({ tripId, shuttleId, isActive }) => {
 
       {isLoading && !qrData && (
         <div className="flex justify-center py-8">
-          <div className="dot-loader"><span /><span /><span /></div>
+          <div className="loader"><span /><span /><span /></div>
         </div>
       )}
 
       {qrImageUrl && (
         <div className="flex flex-col items-center gap-4">
           {/* QR image */}
-          <div className="rounded-2xl p-3" style={{ background: '#132C47', border: '1px solid var(--border-md)' }}>
+          <div className="rounded-2xl p-3" style={{ background: '#132C47', border: '1px solid var(--border-2)' }}>
             <img
               src={qrImageUrl}
               alt="Check-in QR Code"
@@ -110,7 +110,7 @@ const QRGenerator = ({ tripId, shuttleId, isActive }) => {
               Refreshes in {timeLeft}s
             </span>
             {/* Progress bar */}
-            <div className="w-20 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-4)' }}>
+            <div className="w-20 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--glass-1)' }}>
               <div className="h-full rounded-full transition-all"
                 style={{
                   width: `${(timeLeft / 60) * 100}%`,

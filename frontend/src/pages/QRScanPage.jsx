@@ -38,7 +38,7 @@ const QRScanPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6"
-      style={{ background: 'var(--navy)' }}>
+      style={{ background: 'var(--bg-base)' }}>
 
       <div className="w-full max-w-sm text-center animate-fade-in">
         {/* Icon */}
@@ -46,10 +46,10 @@ const QRScanPage = () => {
           style={{
             background: status === 'success' ? 'rgba(16,185,129,0.12)'
               : status === 'error' ? 'rgba(239,68,68,0.12)'
-              : 'var(--surface-2)',
+              : 'var(--glass-2)',
             border: `2px solid ${status === 'success' ? 'rgba(16,185,129,0.4)'
               : status === 'error' ? 'rgba(239,68,68,0.4)'
-              : 'var(--border-md)'}`,
+              : 'var(--border-2)'}`,
           }}>
           {status === 'scanning' && (
             <Bus size={36} style={{ color: 'var(--brand)' }} />
@@ -67,7 +67,7 @@ const QRScanPage = () => {
             <h1 className="font-display font-bold text-2xl mb-2" style={{ color: 'var(--text-1)' }}>
               Confirming check-in...
             </h1>
-            <div className="dot-loader justify-center mt-4"><span /><span /><span /></div>
+            <div className="loader justify-center mt-4"><span /><span /><span /></div>
           </>
         )}
 

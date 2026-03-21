@@ -6,7 +6,7 @@ import {
   Navigation, Clock, Users, BarChart2, Smartphone,
 } from 'lucide-react';
 import api from '../services/api';
-import ThemeToggle from '../components/ThemeToggle';
+import ThemeToggle from '../components/ui/ThemeToggle';
 
 // ── ANIMATED BUS ICON ─────────────────────────────────────
 const BusIcon = ({ size = 24, color = 'white' }) => (
@@ -33,8 +33,7 @@ const StatCounter = ({ value, label, suffix = '' }) => (
 
 // ── FEATURE CARD ──────────────────────────────────────────
 const FeatureCard = ({ icon: Icon, title, desc, color, delay = 0 }) => (
-  <div className="rounded-2xl p-6 group transition-all hover:-translate-y-1"
-    style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+  <div className="glass-md rounded-2xl p-6 group transition-all hover:-translate-y-1">
     <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
       style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
       <Icon size={24} style={{ color }} />
@@ -46,8 +45,8 @@ const FeatureCard = ({ icon: Icon, title, desc, color, delay = 0 }) => (
 
 // ── USER TYPE CARD ────────────────────────────────────────
 const UserCard = ({ icon: Icon, role, title, desc, features, color, cta, ctaTo }) => (
-  <div className="rounded-3xl p-8 flex flex-col"
-    style={{ background: 'var(--surface-2)', border: `1px solid ${color}33` }}>
+  <div className="glass-md rounded-3xl p-8 flex flex-col"
+    style={{ borderColor: `${color}33` }}>
     <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5"
       style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
       <Icon size={28} style={{ color }} />
@@ -75,7 +74,7 @@ const UserCard = ({ icon: Icon, role, title, desc, features, color, cta, ctaTo }
 // ── LIVE ROUTE CARD ───────────────────────────────────────
 const LiveRouteCard = ({ route }) => (
   <div className="rounded-2xl p-4 flex items-center gap-4"
-    style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+    style={{ }}>
     <div className="w-1.5 h-12 rounded-full flex-shrink-0" style={{ background: route.color || '#1A56DB' }} />
     <div className="flex-1 min-w-0">
       <p className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>{route.name}</p>
@@ -114,7 +113,7 @@ const PublicPage = () => {
   }, []);
 
   return (
-    <div style={{ background: 'var(--navy)', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--bg-base)', minHeight: '100vh' }}>
 
       {/* ── NAVBAR ──────────────────────────────────────────── */}
       <nav className="sticky top-0 z-50 px-6 py-4 flex items-center justify-between"
@@ -140,8 +139,8 @@ const PublicPage = () => {
         <div className="flex items-center gap-3">
           <Link to="/login"
             className="hidden sm:flex text-sm font-medium px-4 py-2 rounded-xl transition-all"
-            style={{ color: 'var(--text-2)', border: '1px solid var(--border-md)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'}
+            style={{ color: 'var(--text-2)', border: '1px solid var(--border-2)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--glass-2)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
             Sign in
           </Link>
@@ -190,25 +189,25 @@ const PublicPage = () => {
             </Link>
             <Link to="/login"
               className="flex items-center gap-2 px-8 py-4 rounded-2xl font-semibold text-base transition-all"
-              style={{ color: 'var(--text-1)', border: '1px solid var(--border-md)', background: 'var(--surface-2)' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-2)'}>
+              style={{ color: 'var(--text-1)', border: '1px solid var(--border-2)', background: 'var(--glass-2)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--glass-2)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--glass-2)'}>
               Sign in to your account <ArrowRight size={16} />
             </Link>
           </div>
 
           {/* Animated dashboard preview */}
           <div className="rounded-3xl overflow-hidden mx-auto max-w-3xl"
-            style={{ background: 'var(--surface-2)', border: '1px solid var(--border-md)', boxShadow: '0 40px 80px rgba(0,0,0,0.4)' }}>
+            style={{ background: 'var(--glass-2)', border: '1px solid var(--border-2)', boxShadow: '0 40px 80px rgba(0,0,0,0.4)' }}>
 
             {/* Fake browser bar */}
-            <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-3)' }}>
+            <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: '1px solid var(--border)', background: 'var(--glass-2)' }}>
               <div className="flex gap-1.5">
                 <div className="w-3 h-3 rounded-full" style={{ background: '#FF5F57' }} />
                 <div className="w-3 h-3 rounded-full" style={{ background: '#FFBD2E' }} />
                 <div className="w-3 h-3 rounded-full" style={{ background: '#28CA41' }} />
               </div>
-              <div className="flex-1 mx-4 px-3 py-1 rounded-lg text-xs text-center" style={{ background: 'var(--surface-4)', color: 'var(--text-4)' }}>
+              <div className="flex-1 mx-4 px-3 py-1 rounded-lg text-xs text-center" style={{ background: 'var(--glass-1)', color: 'var(--text-4)' }}>
                 app.shutlix.com
               </div>
             </div>
@@ -222,7 +221,7 @@ const PublicPage = () => {
                   { label: 'Trips Today', val: '24', color: '#D97706' },
                   { label: 'Active Routes', val: '3', color: '#8B5CF6' },
                 ].map(({ label, val, color }) => (
-                  <div key={label} className="rounded-xl p-3 text-center" style={{ background: 'var(--surface-3)', border: '1px solid var(--border)' }}>
+                  <div key={label} className="rounded-xl p-3 text-center" style={{ background: 'var(--glass-2)', border: '1px solid var(--border)' }}>
                     <div className="font-bold text-xl mb-0.5" style={{ color }}>{val}</div>
                     <div className="text-xs" style={{ color: 'var(--text-4)' }}>{label}</div>
                   </div>
@@ -264,7 +263,7 @@ const PublicPage = () => {
       </section>
 
       {/* ── STATS BAR ───────────────────────────────────────── */}
-      <section className="py-12" style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+      <section className="py-12" style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--glass-2)' }}>
         <div className="max-w-4xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
           <StatCounter value="Real-time" label="GPS Updates" />
           <StatCounter value="Any" label="Organisation Worldwide" />
@@ -306,7 +305,7 @@ const PublicPage = () => {
       </section>
 
       {/* ── FOR WHO ─────────────────────────────────────────── */}
-      <section id="for-who" className="py-20 px-6" style={{ background: 'var(--surface-2)' }}>
+      <section id="for-who" className="py-20 px-6" style={{ background: 'var(--glass-2)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="font-display font-bold text-3xl mb-4" style={{ color: 'var(--text-1)' }}>
@@ -387,14 +386,14 @@ const PublicPage = () => {
 
           {loading ? (
             <div className="flex justify-center py-12">
-              <div className="dot-loader"><span/><span/><span/></div>
+              <div className="loader"><span/><span/><span/></div>
             </div>
           ) : routes.length > 0 ? (
             <div className="grid sm:grid-cols-2 gap-4 mb-8">
               {routes.slice(0, 6).map(route => <LiveRouteCard key={route._id} route={route} />)}
             </div>
           ) : (
-            <div className="text-center py-12 rounded-2xl" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            <div className="text-center py-12 rounded-2xl" style={{ }}>
               <Bus size={32} className="mx-auto mb-3" style={{ color: 'var(--text-4)' }} />
               <p style={{ color: 'var(--text-3)' }}>No public routes yet.</p>
               <p className="text-sm mt-1" style={{ color: 'var(--text-4)' }}>Organisations must enable public visibility for their routes.</p>
@@ -413,7 +412,7 @@ const PublicPage = () => {
       </section>
 
       {/* ── CTA BANNER ──────────────────────────────────────── */}
-      <section className="py-20 px-6" style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}>
+      <section className="py-20 px-6" style={{ background: 'var(--glass-2)', borderTop: '1px solid var(--border)' }}>
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="font-display font-bold text-3xl mb-4" style={{ color: 'var(--text-1)' }}>
             Ready to modernise your fleet?
@@ -429,9 +428,9 @@ const PublicPage = () => {
             </Link>
             <Link to="/register"
               className="flex items-center gap-2 px-8 py-4 rounded-2xl font-semibold transition-all"
-              style={{ color: 'var(--text-1)', border: '1px solid var(--border-md)', background: 'var(--surface-3)' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-4)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-3)'}>
+              style={{ color: 'var(--text-1)', border: '1px solid var(--border-2)', background: 'var(--glass-2)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--glass-1)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--glass-2)'}>
               Join as member / driver <ArrowRight size={16} />
             </Link>
           </div>

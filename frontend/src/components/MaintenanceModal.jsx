@@ -39,7 +39,7 @@ const MaintenanceModal = ({ shuttle, onClose, onSaved }) => {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.75)' }}>
       <div className="w-full max-w-md rounded-2xl animate-slide-up"
-        style={{ background: 'var(--surface-2)', border: '1px solid var(--border-md)' }}>
+        style={{ background: 'var(--glass-2)', border: '1px solid var(--border-2)' }}>
 
         <div className="flex items-center justify-between px-5 py-4"
           style={{ borderBottom: '1px solid var(--border)' }}>
@@ -109,7 +109,7 @@ const MaintenanceModal = ({ shuttle, onClose, onSaved }) => {
               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {shuttle.maintenanceLog.slice(-3).reverse().map((log, i) => (
                   <div key={i} className="flex items-start gap-2 text-xs py-1.5 px-2 rounded-lg"
-                    style={{ background: 'var(--surface-3)' }}>
+                    style={{ background: 'var(--glass-2)' }}>
                     <Calendar size={11} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--text-4)' }} />
                     <div>
                       <span style={{ color: 'var(--text-2)' }}>
@@ -128,7 +128,7 @@ const MaintenanceModal = ({ shuttle, onClose, onSaved }) => {
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleSave} disabled={isSaving} className="btn-primary flex-1 gap-2">
             {isSaving
-              ? <span className="dot-loader"><span /><span /><span /></span>
+              ? <span className="loader"><span /><span /><span /></span>
               : <><Save size={14} /> Save Log</>}
           </button>
         </div>

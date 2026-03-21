@@ -1,16 +1,11 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const {
-  setShuttlePosition,
-  getAllActiveShuttles,
-  removeShuttlePosition,
-} = require('./redis');
-const Trip = require('../models/Trip');
-const Shuttle = require('../models/Shuttle');
+const redis = require('./redis');
+const { haversine } = require('../utils/geo');
 
 let io;
 
-const initSocket = (server) => {
+const initSocket = server => {
   io = new Server(server, {
     cors: {
       origin: process.env.CLIENT_URL || 'http://localhost:5173',
@@ -21,179 +16,169 @@ const initSocket = (server) => {
     pingInterval: 10000,
   });
 
+  // ── Auth middleware ──────────────────────────────────────
   io.use((socket, next) => {
     try {
-      const token = socket.handshake.auth?.token ||
-                    socket.handshake.headers?.authorization?.split(' ')[1];
-      if (!token) {
-        socket.user = null;
-        return next();
-      }
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.user = decoded;
+      const token =
+        socket.handshake.auth?.token ||
+        socket.handshake.headers?.authorization?.split(' ')[1];
+      if (!token) { socket.user = null; return next(); }
+      socket.user = jwt.verify(token, process.env.JWT_SECRET);
       next();
-    } catch (err) {
+    } catch {
       socket.user = null;
       next();
     }
   });
 
-  io.on('connection', (socket) => {
-    const userId = socket.user?.id || 'guest';
+  io.on('connection', socket => {
+    const uid  = socket.user?.id   || 'guest';
     const role = socket.user?.role || 'guest';
-    console.log(`🔌 Socket connected: ${socket.id} | User: ${userId} | Role: ${role}`);
+    console.log(`🔌 Connected: ${uid} (${role})`);
 
-    socket.on('join:organization', ({ organizationId }) => {
+    // ── Join org room ──────────────────────────────────────
+    socket.on('join:organization', async ({ organizationId }) => {
       if (!organizationId) return;
-      socket.join(`organization:${organizationId}`);
+      socket.join(`org:${organizationId}`);
       socket.organizationId = organizationId;
-      console.log(`📍 ${socket.id} joined organization room: ${organizationId}`);
-      sendCurrentPositions(socket, organizationId);
+
+      // Send current shuttle positions
+      const positions = await redis.getAllPositions();
+      const relevant  = positions.filter(p => p.organizationId === organizationId);
+      if (relevant.length) socket.emit('shuttle:allPositions', relevant);
     });
 
-    socket.on('driver:startTrip', async ({ tripId, shuttleId, routeId }) => {
+    // ── Driver: start trip ─────────────────────────────────
+    socket.on('driver:startTrip', ({ tripId, shuttleId, routeId }) => {
       if (socket.user?.role !== 'driver') return;
-      socket.tripId = tripId;
+      socket.tripId   = tripId;
       socket.shuttleId = shuttleId;
       socket.join(`shuttle:${shuttleId}`);
-      console.log(`🚌 Driver ${socket.user.id} started trip. Shuttle: ${shuttleId}`);
+      console.log(`🚌 Driver ${uid} started trip ${tripId}`);
     });
 
-    socket.on('driver:location', async (data) => {
-      if (socket.user?.role !== 'driver') return;
-      const { lat, lng, speed, heading, passengerCount, shuttleId } = data;
-      if (!lat || !lng || !shuttleId) return;
+    // ── Driver: location update ────────────────────────────
+    socket.on('driver:location', async ({ lat, lng, speed, heading, passengerCount, shuttleId }) => {
+      if (socket.user?.role !== 'driver' || !socket.organizationId) return;
 
-      const positionData = {
+      const posData = {
         shuttleId,
-        driverId: socket.user.id,
-        lat: parseFloat(lat),
-        lng: parseFloat(lng),
-        speed: parseFloat(speed) || 0,
-        heading: parseFloat(heading) || 0,
-        passengerCount: parseInt(passengerCount) || 0,
-        tripId: socket.tripId,
-        routeId: socket.routeId,
         organizationId: socket.organizationId,
+        lat, lng, speed: speed || 0,
+        heading: heading || 0,
+        passengerCount: passengerCount || 0,
         timestamp: Date.now(),
-        isActive: true,
+        driverId: uid,
       };
 
-      await setShuttlePosition(shuttleId, positionData);
-      if (socket.organizationId) {
-        io.to(`organization:${socket.organizationId}`).emit('shuttle:position', positionData);
-      }
-      socket.emit('driver:locationAck', { timestamp: positionData.timestamp });
-    });
+      // Persist in Redis (30s TTL — auto-cleans if driver disconnects)
+      await redis.setPosition(shuttleId, posData);
 
-    socket.on('driver:passengerCount', async ({ shuttleId, count }) => {
-      if (socket.user?.role !== 'driver') return;
+      // Broadcast to all org members
+      io.to(`org:${socket.organizationId}`).emit('shuttle:position', posData);
+
+      // Geofence check — server-side for reliability
       try {
-        const current = await setShuttlePosition(shuttleId, {
-          ...await getShuttlePosition(shuttleId),
-          passengerCount: count,
-        });
-        if (socket.organizationId) {
-          io.to(`organization:${socket.organizationId}`).emit('shuttle:capacity', {
-            shuttleId,
-            passengerCount: count,
-            timestamp: Date.now(),
-          });
+        const { Geofence } = require('../models/index');
+        const fences = await Geofence.find({
+          organizationId: socket.organizationId,
+          isActive: true,
+        }).populate('stopId', 'name');
+
+        for (const fence of fences) {
+          const dist = haversine(lat, lng, fence.center.lat, fence.center.lng) * 1000; // metres
+          if (dist <= fence.radiusMeters) {
+            io.to(`org:${socket.organizationId}`).emit('geofence:arrived', {
+              shuttleId,
+              stopId:   fence.stopId._id,
+              stopName: fence.stopId.name,
+              timestamp: Date.now(),
+            });
+          }
         }
-      } catch (err) { console.error('passengerCount update error:', err); }
+      } catch { /* Geofence check non-fatal */ }
     });
 
+    // ── Driver: passenger count ───────────────────────────
+    socket.on('driver:passengerCount', ({ shuttleId, count }) => {
+      if (socket.user?.role !== 'driver') return;
+      io.to(`org:${socket.organizationId}`).emit('shuttle:capacity', { shuttleId, passengerCount: count });
+    });
+
+    // ── Driver: delay report ──────────────────────────────
     socket.on('driver:delay', ({ shuttleId, routeId, estimatedDelay, message }) => {
       if (socket.user?.role !== 'driver') return;
-      if (socket.organizationId) {
-        io.to(`organization:${socket.organizationId}`).emit('shuttle:delay', {
-          shuttleId,
-          routeId,
-          estimatedDelay,
-          message: message || `Route is delayed by approximately ${estimatedDelay} minutes`,
-          timestamp: Date.now(),
-        });
-      }
-    });
-
-    socket.on('driver:emergency', async ({ shuttleId, lat, lng, message }) => {
-      if (socket.user?.role !== 'driver') return;
-      const emergencyData = {
-        driverId: socket.user.id,
-        shuttleId,
-        location: { lat, lng },
-        message: message || 'Driver has triggered emergency SOS',
-        timestamp: Date.now(),
-      };
-      io.to(`admin:${socket.organizationId}`).emit('emergency:sos', emergencyData);
-      if (socket.organizationId) {
-        io.to(`organization:${socket.organizationId}`).emit('shuttle:emergency', emergencyData);
-      }
-      console.log(`🆘 EMERGENCY from driver ${socket.user.id} at shuttle ${shuttleId}`);
-    });
-
-    socket.on('driver:endTrip', async ({ shuttleId, tripId }) => {
-      if (socket.user?.role !== 'driver') return;
-      await removeShuttlePosition(shuttleId);
-      if (socket.organizationId) {
-        io.to(`organization:${socket.organizationId}`).emit('shuttle:offline', {
-          shuttleId,
-          timestamp: Date.now(),
-        });
-      }
-      socket.leave(`shuttle:${shuttleId}`);
-      console.log(`🏁 Driver ${socket.user.id} ended trip. Shuttle ${shuttleId} offline.`);
-    });
-
-    socket.on('admin:join', ({ organizationId }) => {
-      if (socket.user?.role !== 'admin' && socket.user?.role !== 'superadmin') return;
-      socket.join(`admin:${organizationId}`);
-      console.log(`👮 Admin ${socket.user.id} joined admin room for organization ${organizationId}`);
-    });
-
-    socket.on('admin:broadcast', ({ organizationId, message, type }) => {
-      if (socket.user?.role !== 'admin' && socket.user?.role !== 'superadmin') return;
-      io.to(`organization:${organizationId}`).emit('admin:announcement', {
-        message,
-        type: type || 'info',
-        timestamp: Date.now(),
+      io.to(`org:${socket.organizationId}`).emit('shuttle:delay', {
+        shuttleId, routeId, estimatedDelay, message,
+        reportedAt: Date.now(),
       });
     });
 
-    socket.on('disconnect', async (reason) => {
-      console.log(`🔌 Socket disconnected: ${socket.id} | Reason: ${reason}`);
+    // ── Driver: emergency SOS ─────────────────────────────
+    socket.on('driver:emergency', ({ shuttleId, lat, lng }) => {
+      if (socket.user?.role !== 'driver') return;
+      // Alert admin
+      io.to(`org:${socket.organizationId}`).emit('emergency:sos', {
+        shuttleId, driverId: uid, location: { lat, lng }, timestamp: Date.now(),
+      });
+      // Alert all students
+      io.to(`org:${socket.organizationId}`).emit('shuttle:emergency', { shuttleId });
+      console.log(`🆘 SOS from driver ${uid} at ${lat},${lng}`);
+    });
+
+    // ── Driver: end trip ──────────────────────────────────
+    socket.on('driver:endTrip', async ({ shuttleId }) => {
+      if (socket.user?.role !== 'driver') return;
+      await redis.removePosition(shuttleId);
+      io.to(`org:${socket.organizationId}`).emit('shuttle:offline', { shuttleId });
+      socket.leave(`shuttle:${shuttleId}`);
+    });
+
+    // ── Admin: broadcast ──────────────────────────────────
+    socket.on('admin:broadcast', ({ organizationId, message, type }) => {
+      if (!['admin', 'superadmin'].includes(socket.user?.role)) return;
+      io.to(`org:${organizationId}`).emit('admin:announcement', { message, type, timestamp: Date.now() });
+    });
+
+    // ── Admin: live route update ──────────────────────────
+    socket.on('admin:updateRoute', ({ routeId, changes }) => {
+      if (!['admin', 'superadmin'].includes(socket.user?.role)) return;
+      io.to(`org:${socket.organizationId}`).emit('route:updated', {
+        routeId, changes, timestamp: Date.now(),
+      });
+    });
+
+    // ── Chat: join room ───────────────────────────────────
+    socket.on('chat:join', ({ roomId }) => {
+      socket.join(`chat:${roomId}`);
+    });
+
+    socket.on('chat:leave', ({ roomId }) => {
+      socket.leave(`chat:${roomId}`);
+    });
+
+    socket.on('chat:typing', ({ roomId, isTyping }) => {
+      socket.to(`chat:${roomId}`).emit('chat:typing', {
+        userId: uid, roomId, isTyping,
+      });
+    });
+
+    // ── Disconnect ────────────────────────────────────────
+    socket.on('disconnect', async () => {
+      console.log(`🔌 Disconnected: ${uid}`);
+      // If driver was on trip, remove position from Redis
       if (socket.user?.role === 'driver' && socket.shuttleId) {
-        setTimeout(async () => {
-          const current = await getShuttlePosition(socket.shuttleId);
-          if (current && current.driverId === socket.user.id) {
-            const timeSinceUpdate = Date.now() - (current.timestamp || 0);
-            if (timeSinceUpdate > 25000) {
-              await removeShuttlePosition(socket.shuttleId);
-              if (socket.organizationId) {
-                io.to(`organization:${socket.organizationId}`).emit('shuttle:offline', {
-                  shuttleId: socket.shuttleId,
-                  timestamp: Date.now(),
-                });
-              }
-            }
-          }
-        }, 30000);
+        await redis.removePosition(socket.shuttleId);
+        if (socket.organizationId) {
+          io.to(`org:${socket.organizationId}`).emit('shuttle:offline', {
+            shuttleId: socket.shuttleId,
+          });
+        }
       }
     });
   });
 
-  console.log('📡 Socket.IO initialized');
   return io;
-};
-
-const sendCurrentPositions = async (socket, organizationId) => {
-  try {
-    const allPositions = await getAllActiveShuttles();
-    const orgPositions = allPositions.filter(p => p.organizationId === organizationId);
-    if (orgPositions.length > 0) {
-      socket.emit('shuttle:allPositions', orgPositions);
-    }
-  } catch (err) { console.error('Error sending current positions:', err); }
 };
 
 const getIO = () => {
@@ -201,5 +186,4 @@ const getIO = () => {
   return io;
 };
 
-module.exports = initSocket;
-module.exports.getIO = getIO;
+module.exports = { initSocket, getIO };

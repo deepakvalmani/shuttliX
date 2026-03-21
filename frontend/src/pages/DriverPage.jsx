@@ -9,8 +9,8 @@ import {
 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import useSocket from '../hooks/useSocket';
-import ThemeToggle from '../components/ThemeToggle';
-import CapacityBadge from '../components/ui/CapacityBadge';
+import ThemeToggle from '../components/ui/ThemeToggle';
+import { CapacityBadge } from '../components/ui/index';
 import QRGenerator from '../components/QRGenerator';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -36,8 +36,7 @@ const DelayModal = ({ onConfirm, onClose }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.7)' }}>
-      <div className="w-full max-w-sm rounded-2xl p-6 animate-slide-up"
-        style={{ background: 'var(--surface-2)', border: '1px solid var(--border-md)' }}>
+      <div className="glass-heavy w-full max-w-sm rounded-2xl p-6 animate-slide-up">
         <h3 className="font-display font-bold text-lg mb-4" style={{ color: 'var(--text-1)' }}>Report Delay</h3>
         <div className="mb-4">
           <label className="label">Delay (minutes)</label>
@@ -84,7 +83,7 @@ const EmergencyModal = ({ onConfirm, onClose }) => (
 const DriverPage = () => {
   const { user, logout } = useAuthStore();
   const { emitLocation, emitPassengerCount, emitDelay, emitEmergency,
-    emitStartTrip, emitEndTrip, joinOrganization } = useSocket();
+    emitStartTrip, emitEndTrip, joinOrganization, emitGeofenceCheck } = useSocket();
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -301,6 +300,9 @@ const DriverPage = () => {
         setGpsAccuracy(pos.coords.accuracy);
         setLastUpdate(new Date());
         latestPosRef.current = position;
+        // Check geofences on every location update
+        const sid = trip?.shuttleId?._id || trip?.shuttleId || selectedShuttle?._id;
+        if (sid) emitGeofenceCheck(position.lat, position.lng, sid);
 
         // Accumulate distance
         if (prevPosRef.current) {
@@ -414,13 +416,13 @@ const DriverPage = () => {
   const routeStops = (currentTrip?.routeId?.stops || selectedRoute?.stops || []).filter(s => s.stopId);
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--navy)' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-base)' }}>
       {/* Header */}
       <div className="flex-shrink-0 px-5 py-4 flex items-center justify-between"
-        style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+        style={{ background: 'var(--glass-3)', backdropFilter: 'blur(20px)', borderBottom: '1px solid var(--border-1)' }}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: isOnTrip ? 'var(--brand)' : 'var(--surface-3)', border: '1px solid var(--border)' }}>
+            style={{ background: isOnTrip ? 'var(--brand)' : 'var(--glass-2)', border: '1px solid var(--border)' }}>
             <Bus size={18} style={{ color: isOnTrip ? 'white' : 'var(--text-3)' }} />
           </div>
           <div>
@@ -433,7 +435,7 @@ const DriverPage = () => {
           {isOnTrip && (
             <span className="text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1.5"
               style={{ background: 'rgba(16,185,129,0.12)', color: '#34D399', border: '1px solid rgba(16,185,129,0.3)' }}>
-              <span className="status-dot-green" /> LIVE
+              <span className="dot-green" /> LIVE
             </span>
           )}
           <ThemeToggle />
@@ -443,7 +445,7 @@ const DriverPage = () => {
 
       {/* View tabs */}
       {isOnTrip && (
-        <div className="flex gap-1 px-5 py-3" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+        <div className="flex gap-1 px-5 py-3" style={{ borderBottom: '1px solid var(--border)', background: 'var(--glass-2)' }}>
           {[
             { key: 'dashboard', icon: List, label: 'Dashboard' },
             { key: 'map', icon: Map, label: 'My Location' },
@@ -499,7 +501,7 @@ const DriverPage = () => {
           ) : (
             <div className="relative">
               {/* Vertical line */}
-              <div className="absolute left-5 top-5 bottom-5 w-0.5" style={{ background: 'var(--surface-4)' }} />
+              <div className="absolute left-5 top-5 bottom-5 w-0.5" style={{ background: 'var(--glass-1)' }} />
               {routeStops.map((s, idx) => {
                 const stop = s.stopId;
                 const isNext = nextStop?._id === stop?._id;
@@ -507,8 +509,8 @@ const DriverPage = () => {
                   <div key={idx} className="flex items-start gap-4 mb-4 relative">
                     <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 z-10 font-bold text-sm"
                       style={{
-                        background: isNext ? 'var(--brand)' : 'var(--surface-3)',
-                        border: `2px solid ${isNext ? 'var(--brand)' : 'var(--border-md)'}`,
+                        background: isNext ? 'var(--brand)' : 'var(--glass-2)',
+                        border: `2px solid ${isNext ? 'var(--brand)' : 'var(--border-2)'}`,
                         color: isNext ? 'white' : 'var(--text-3)',
                       }}>
                       {idx + 1}
@@ -536,7 +538,7 @@ const DriverPage = () => {
 
           {/* Pre-trip */}
           {!isOnTrip && (
-            <div className="rounded-2xl p-5" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            <div className="rounded-2xl p-5" style={{ background: 'var(--glass-2)', backdropFilter: 'blur(20px)', border: '1px solid var(--border-1)' }}>
               <p className="font-display font-semibold text-base mb-4" style={{ color: 'var(--text-1)' }}>
                 Select Vehicle & Route
               </p>
@@ -554,7 +556,7 @@ const DriverPage = () => {
                   </button>
                   {showShuttleSelect && (
                     <div className="absolute top-full left-0 right-0 mt-1 rounded-xl overflow-hidden z-20"
-                      style={{ background: 'var(--surface-3)', border: '1px solid var(--border-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                      style={{ background: 'var(--glass-2)', border: '1px solid var(--border-2)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
                       {shuttles.filter(s => s.status !== 'retired').map(s => (
                         <button key={s._id} onClick={() => {
                           setSelectedShuttle(s);
@@ -563,7 +565,7 @@ const DriverPage = () => {
                         }}
                           className="w-full text-left px-4 py-3 text-sm"
                           style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-1)' }}
-                          onMouseEnter={e => e.target.style.background = 'var(--surface-4)'}
+                          onMouseEnter={e => e.target.style.background = 'var(--glass-1)'}
                           onMouseLeave={e => e.target.style.background = 'transparent'}>
                           <span className="font-medium">{s.name}</span>
                           {s.shortCode && <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ background: 'var(--brand)', color: 'white' }}>{s.shortCode}</span>}
@@ -585,7 +587,7 @@ const DriverPage = () => {
                 </select>
               </div>
               <button onClick={handleStartTrip} disabled={isStarting || !selectedShuttle} className="btn-primary btn-lg w-full">
-                {isStarting ? <><span className="dot-loader"><span/><span/><span/></span> Starting...</>
+                {isStarting ? <><span className="loader"><span/><span/><span/></span> Starting...</>
                   : <><Play size={18} /> Start Trip & Share Location</>}
               </button>
             </div>
@@ -595,7 +597,7 @@ const DriverPage = () => {
           {isOnTrip && (
             <>
               {/* Trip status */}
-              <div className="rounded-2xl p-5" style={{ background: 'var(--surface-2)', border: '1px solid var(--brand)', boxShadow: '0 0 0 1px rgba(26,86,219,0.2)' }}>
+              <div className="rounded-2xl p-5" style={{ background: 'var(--glass-2)', backdropFilter: 'blur(20px)', border: '1px solid var(--brand)', boxShadow: '0 0 0 1px rgba(26,86,219,0.2)' }}>
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--brand)' }}>Active Trip</p>
@@ -631,7 +633,7 @@ const DriverPage = () => {
                 {/* GPS coords */}
                 {gpsPos && (
                   <div className="rounded-xl px-3 py-2 text-xs font-mono mb-3 flex items-center gap-2"
-                    style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }}>
+                    style={{ background: 'var(--glass-2)', color: 'var(--text-3)' }}>
                     <Navigation size={12} style={{ color: 'var(--brand)' }} />
                     {gpsPos.lat.toFixed(5)}, {gpsPos.lng.toFixed(5)}
                     {gpsPos.speed > 0 && (
@@ -648,7 +650,7 @@ const DriverPage = () => {
                     { label: 'Distance', value: `${distanceCovered} km`, color: '#D97706' },
                   ].map(({ label, value, color }) => (
                     <div key={label} className="rounded-xl p-3 text-center"
-                      style={{ background: 'var(--surface-3)', border: '1px solid var(--border)' }}>
+                      style={{ background: 'var(--glass-2)', border: '1px solid var(--border)' }}>
                       <div className="font-bold text-base" style={{ color }}>{value}</div>
                       <div className="text-xs" style={{ color: 'var(--text-4)' }}>{label}</div>
                     </div>
@@ -672,7 +674,7 @@ const DriverPage = () => {
               </div>
 
               {/* Passenger counter */}
-              <div className="rounded-2xl p-5" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+              <div className="rounded-2xl p-5" style={{ background: 'var(--glass-2)', border: '1px solid var(--border)' }}>
                 <p className="font-semibold text-sm mb-4" style={{ color: 'var(--text-2)' }}>Passenger Count</p>
                 <CapacityBadge current={passengerCount} total={maxCapacity} />
                 <div className="flex items-center gap-4 mt-5">
@@ -719,7 +721,7 @@ const DriverPage = () => {
               {/* End trip */}
               <button onClick={handleEndTrip} disabled={isEnding} className="btn-danger btn-lg w-full rounded-2xl">
                 {isEnding
-                  ? <><span className="dot-loader"><span/><span/><span/></span> Ending...</>
+                  ? <><span className="loader"><span/><span/><span/></span> Ending...</>
                   : <><Square size={18} /> End Trip</>}
               </button>
             </>

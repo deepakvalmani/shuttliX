@@ -1,10 +1,10 @@
 const LoadingScreen = ({ message = 'Loading ShutliX...' }) => (
   <div className="min-h-screen flex flex-col items-center justify-center gap-6"
-    style={{ background: 'var(--navy)' }}>
+    style={{ background: 'var(--bg-base)' }}>
     {/* Animated bus icon */}
     <div className="relative">
       <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-        style={{ background: 'var(--surface-2)', border: '1px solid var(--border-md)' }}>
+        style={{ background: 'var(--glass-2)', border: '1px solid var(--border-2)' }}>
         <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
           <rect x="4" y="10" width="28" height="18" rx="4" fill="#1A56DB" />
           <rect x="7" y="6" width="22" height="8" rx="2" fill="rgba(255,255,255,0.8)" />
@@ -28,7 +28,7 @@ const LoadingScreen = ({ message = 'Loading ShutliX...' }) => (
       <p className="text-sm" style={{ color: 'var(--text-3)' }}>{message}</p>
     </div>
 
-    <div className="dot-loader">
+    <div className="loader">
       <span /><span /><span />
     </div>
   </div>

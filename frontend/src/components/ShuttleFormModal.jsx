@@ -78,7 +78,7 @@ const ShuttleFormModal = ({ shuttle, drivers = [], routes = [], onSave, onClose 
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.75)' }}>
       <div className="w-full max-w-lg rounded-2xl animate-slide-up overflow-hidden"
-        style={{ background: 'var(--surface-2)', border: '1px solid var(--border-md)' }}>
+        style={{ background: 'var(--glass-2)', border: '1px solid var(--border-2)' }}>
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2">
             <Bus size={18} style={{ color: 'var(--brand)' }} />
@@ -161,7 +161,7 @@ const ShuttleFormModal = ({ shuttle, drivers = [], routes = [], onSave, onClose 
         <div className="flex gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleSave} disabled={isSaving} className="btn-primary flex-1 gap-2">
-            {isSaving ? <span className="dot-loader"><span/><span/><span/></span>
+            {isSaving ? <span className="loader"><span/><span/><span/></span>
               : <><Save size={15} />{isEdit ? 'Save changes' : 'Add vehicle'}</>}
           </button>
         </div>

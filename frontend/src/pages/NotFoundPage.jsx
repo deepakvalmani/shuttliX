@@ -3,9 +3,9 @@ import { Bus, ArrowLeft } from 'lucide-react';
 
 export const NotFoundPage = () => (
   <div className="min-h-screen flex flex-col items-center justify-center gap-6"
-    style={{ background: 'var(--navy)' }}>
+    style={{ background: 'var(--bg-base)' }}>
     <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-      style={{ background: 'var(--surface-2)', border: '1px solid var(--border-md)' }}>
+      style={{ background: 'var(--glass-2)', border: '1px solid var(--border-2)' }}>
       <Bus size={32} style={{ color: 'var(--brand)' }} />
     </div>
     <div className="text-center">

@@ -2,76 +2,76 @@ import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import useAuthStore from './store/authStore';
 import useSocket from './hooks/useSocket';
+import { LoadingScreen } from './components/ui/index';
 
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
+import LoginPage         from './pages/LoginPage';
+import RegisterPage      from './pages/RegisterPage';
 import AdminRegisterPage from './pages/AdminRegisterPage';
-import StudentPage from './pages/StudentPage';
-import DriverPage from './pages/DriverPage';
-import AdminPage from './pages/AdminPage';
-import { NotFoundPage } from './pages/NotFoundPage';
-import PublicPage from './pages/PublicPage';
-import QRScanPage from './pages/QRScanPage';
-import ProfilePage from './pages/ProfilePage';
-import RouteEditorPage from './pages/RouteEditorPage';
-import StopManagerPage from './pages/StopManagerPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import LoadingScreen from './components/ui/LoadingScreen';
+import StudentPage       from './pages/StudentPage';
+import DriverPage        from './pages/DriverPage';
+import AdminPage         from './pages/AdminPage';
+import PublicPage        from './pages/PublicPage';
+import ProfilePage       from './pages/ProfilePage';
+import ChatPage          from './pages/ChatPage';
+import QRScanPage        from './pages/QRScanPage';
+import RouteEditorPage   from './pages/RouteEditorPage';
+import StopManagerPage   from './pages/StopManagerPage';
+import NotFoundPage      from './pages/NotFoundPage';
 
-const getRoleHome = (role) => {
-  if (role === 'driver') return '/driver';
-  if (role === 'admin' || role === 'superadmin') return '/admin';
-  return '/student';
-};
+const roleHome = role => ({ driver: '/driver', admin: '/admin', superadmin: '/admin' }[role] || '/student');
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const Protected = ({ children, roles }) => {
   const { isAuthenticated, user, isLoading } = useAuthStore();
   const location = useLocation();
   if (isLoading) return <LoadingScreen />;
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
-  if (allowedRoles && !allowedRoles.includes(user?.role))
-    return <Navigate to={getRoleHome(user?.role)} replace />;
+  if (roles && !roles.includes(user?.role)) return <Navigate to={roleHome(user?.role)} replace />;
   return children;
 };
 
-const PublicRoute = ({ children }) => {
+const Public = ({ children }) => {
   const { isAuthenticated, user, isLoading } = useAuthStore();
   if (isLoading) return <LoadingScreen />;
-  if (isAuthenticated) return <Navigate to={getRoleHome(user?.role)} replace />;
+  if (isAuthenticated) return <Navigate to={roleHome(user?.role)} replace />;
   return children;
 };
 
-const SocketInitializer = () => { useSocket(); return null; };
+const SocketInit = () => { useSocket(); return null; };
 
-const App = () => {
+export default function App() {
   const { init, isAuthenticated } = useAuthStore();
-  useEffect(() => { init(); }, [init]);
+  useEffect(() => { init(); }, []);
 
   return (
     <>
-      {isAuthenticated && <SocketInitializer />}
+      {isAuthenticated && <SocketInit />}
       <Routes>
-        <Route path="/" element={<PublicPage />} />
-        <Route path="/public" element={<PublicPage />} />
-        <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-        <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
-        <Route path="/admin/signup" element={<PublicRoute><AdminRegisterPage /></PublicRoute>} />
+        {/* Public pages */}
+        <Route path="/"           element={<PublicPage />} />
+        <Route path="/public"     element={<PublicPage />} />
+        <Route path="/login"      element={<Public><LoginPage /></Public>} />
+        <Route path="/register"   element={<Public><RegisterPage /></Public>} />
+        <Route path="/admin/signup" element={<Public><AdminRegisterPage /></Public>} />
+        <Route path="/forgot-password" element={<Public><ForgotPasswordPage /></Public>} />
 
-        <Route path="/student/*" element={<ProtectedRoute allowedRoles={['student']}><StudentPage /></ProtectedRoute>} />
-        <Route path="/driver/*" element={<ProtectedRoute allowedRoles={['driver']}><DriverPage /></ProtectedRoute>} />
-        <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin','superadmin']}><AdminPage /></ProtectedRoute>} />
+        {/* Role-protected */}
+        <Route path="/student/*"  element={<Protected roles={['student']}><StudentPage /></Protected>} />
+        <Route path="/driver/*"   element={<Protected roles={['driver']}><DriverPage /></Protected>} />
+        <Route path="/admin/*"    element={<Protected roles={['admin','superadmin']}><AdminPage /></Protected>} />
 
-        <Route path="/checkin/:token" element={<ProtectedRoute allowedRoles={['student']}><QRScanPage /></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute allowedRoles={['student']}><ProfilePage /></ProtectedRoute>} />
-        <Route path="/admin/routes/new" element={<ProtectedRoute allowedRoles={['admin','superadmin']}><RouteEditorPage /></ProtectedRoute>} />
-        <Route path="/admin/routes/:routeId/edit" element={<ProtectedRoute allowedRoles={['admin','superadmin']}><RouteEditorPage /></ProtectedRoute>} />
-        <Route path="/admin/stops" element={<ProtectedRoute allowedRoles={['admin','superadmin']}><StopManagerPage /></ProtectedRoute>} />
-        <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+        {/* Shared authenticated */}
+        <Route path="/profile"    element={<Protected roles={['student','driver','admin','superadmin']}><ProfilePage /></Protected>} />
+        <Route path="/chat"       element={<Protected roles={['student','driver','admin','superadmin']}><ChatPage /></Protected>} />
+        <Route path="/checkin/:token" element={<Protected roles={['student']}><QRScanPage /></Protected>} />
+
+        {/* Admin tools */}
+        <Route path="/admin/routes/new"          element={<Protected roles={['admin','superadmin']}><RouteEditorPage /></Protected>} />
+        <Route path="/admin/routes/:routeId/edit" element={<Protected roles={['admin','superadmin']}><RouteEditorPage /></Protected>} />
+        <Route path="/admin/stops"               element={<Protected roles={['admin','superadmin']}><StopManagerPage /></Protected>} />
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </>
   );
-};
-
-export default App;
+}

@@ -7,97 +7,101 @@ import toast from 'react-hot-toast';
 const useSocket = () => {
   const { user, isAuthenticated } = useAuthStore();
   const { updateShuttlePosition, setAllPositions, removeShuttle, updateCapacity } = useShuttleStore();
-  const socketRef = useRef(null);
-  const hasJoinedRef = useRef(false);
+  const joined = useRef(false);
 
   const joinOrganization = useCallback(() => {
-    const socket = getSocket();
-    if (!socket || !user?.organizationId || hasJoinedRef.current) return;
-    socket.emit('join:organization', { organizationId: user.organizationId });
-    hasJoinedRef.current = true;
+    const s = getSocket();
+    if (!s || !user?.organizationId || joined.current) return;
+    s.emit('join:organization', { organizationId: user.organizationId });
+    joined.current = true;
   }, [user?.organizationId]);
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;
+
     const socket = connectSocket();
-    socketRef.current = socket;
 
     socket.on('connect', () => {
-      console.log('🔌 Socket connected:', socket.id);
-      hasJoinedRef.current = false;
+      joined.current = false;
       joinOrganization();
     });
-    socket.on('disconnect', (reason) => {
-      console.log('🔌 Socket disconnected:', reason);
-      hasJoinedRef.current = false;
-    });
-    socket.on('connect_error', (err) => console.warn('⚠️ Socket connection error:', err.message));
+    socket.on('disconnect', () => { joined.current = false; });
 
-    socket.on('shuttle:position', updateShuttlePosition);
+    // Shuttle positions
+    socket.on('shuttle:position',     updateShuttlePosition);
     socket.on('shuttle:allPositions', setAllPositions);
-    socket.on('shuttle:offline', ({ shuttleId }) => removeShuttle(shuttleId));
-    socket.on('shuttle:capacity', ({ shuttleId, passengerCount }) => updateCapacity(shuttleId, passengerCount));
+    socket.on('shuttle:offline',      ({ shuttleId }) => removeShuttle(shuttleId));
+    socket.on('shuttle:capacity',     ({ shuttleId, passengerCount }) => updateCapacity(shuttleId, passengerCount));
 
-    socket.on('shuttle:delay', (data) => {
-      toast(data.message || 'A shuttle is delayed', {
-        icon: '⚠️',
-        duration: 6000,
-        style: { background: '#78350F', color: '#FDE68A', border: '1px solid #92400E' },
+    // Alerts
+    socket.on('shuttle:delay', data => {
+      toast(`⏱ Delay: ${data.message || 'A shuttle is delayed'}`, {
+        icon: '⚠️', duration: 8000,
+        style: { background: '#1A0E00', color: '#FDE68A', border: '1px solid #78350F' },
       });
     });
-    socket.on('shuttle:emergency', (data) => {
-      toast.error('🆘 Emergency reported on campus. Authorities notified.', { duration: 10000 });
+
+    socket.on('shuttle:emergency', () => {
+      toast.error('🆘 Emergency reported on campus!', { duration: 10000 });
     });
+
     socket.on('admin:announcement', ({ message, type }) => {
-      if (type === 'danger') toast.error(message, { duration: 10000 });
-      else if (type === 'success') toast.success(message, { duration: 8000 });
-      else toast(message, { duration: 8000 });
+      const styles = {
+        danger:  { background: '#1A0000', color: '#FCA5A5', border: '1px solid #7F1D1D' },
+        success: { background: '#001A0A', color: '#6EE7B7', border: '1px solid #065F46' },
+        warning: { background: '#1A0E00', color: '#FDE68A', border: '1px solid #78350F' },
+        info:    { background: '#0A0015', color: '#C4B5FD', border: '1px solid #4C1D95' },
+      };
+      toast(message, {
+        duration: 8000,
+        style: styles[type] || styles.info,
+      });
     });
+
+    socket.on('geofence:arrived', ({ stopName }) => {
+      toast(`🚏 Shuttle arrived at ${stopName}`, { duration: 5000, icon: '📍' });
+    });
+
+    socket.on('route:updated', () => {
+      toast('🗺 Route updated by admin', { duration: 4000 });
+    });
+
     if (user.role === 'admin' || user.role === 'superadmin') {
-      socket.on('emergency:sos', (data) => {
+      socket.on('emergency:sos', data => {
         toast.error(
-          `🆘 DRIVER SOS — Shuttle ${data.shuttleId?.slice(-4)} at ${data.location?.lat?.toFixed(4)}, ${data.location?.lng?.toFixed(4)}`,
+          `🆘 DRIVER SOS — lat:${data.location?.lat?.toFixed(4)}, lng:${data.location?.lng?.toFixed(4)}`,
           { duration: 30000 }
         );
+      });
+      socket.on('student:report', data => {
+        toast(`📢 ${data.studentName}: ${data.type}`, { icon: '🚨', duration: 10000 });
       });
     }
 
     if (!socket.connected) socket.connect();
 
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('connect_error');
-      socket.off('shuttle:position');
-      socket.off('shuttle:allPositions');
-      socket.off('shuttle:offline');
-      socket.off('shuttle:capacity');
-      socket.off('shuttle:delay');
-      socket.off('shuttle:emergency');
-      socket.off('admin:announcement');
-      socket.off('emergency:sos');
+      [
+        'connect','disconnect','shuttle:position','shuttle:allPositions',
+        'shuttle:offline','shuttle:capacity','shuttle:delay','shuttle:emergency',
+        'admin:announcement','geofence:arrived','route:updated',
+        'emergency:sos','student:report',
+      ].forEach(e => socket.off(e));
       disconnectSocket();
     };
   }, [isAuthenticated, user?.organizationId, user?.role]);
 
-  const emitLocation = useCallback((data) => getSocket()?.emit('driver:location', data), []);
-  const emitPassengerCount = useCallback((shuttleId, count) => getSocket()?.emit('driver:passengerCount', { shuttleId, count }), []);
-  const emitDelay = useCallback((shuttleId, routeId, estimatedDelay, message) => getSocket()?.emit('driver:delay', { shuttleId, routeId, estimatedDelay, message }), []);
-  const emitEmergency = useCallback((shuttleId, lat, lng) => getSocket()?.emit('driver:emergency', { shuttleId, lat, lng }), []);
-  const emitStartTrip = useCallback((tripId, shuttleId, routeId) => getSocket()?.emit('driver:startTrip', { tripId, shuttleId, routeId }), []);
-  const emitEndTrip = useCallback((shuttleId, tripId) => getSocket()?.emit('driver:endTrip', { shuttleId, tripId }), []);
-  const emitAdminBroadcast = useCallback((organizationId, message, type) => getSocket()?.emit('admin:broadcast', { organizationId, message, type }), []);
+  const emit = useCallback((event, data) => getSocket()?.emit(event, data), []);
 
   return {
-    socket: socketRef.current,
-    emitLocation,
-    emitPassengerCount,
-    emitDelay,
-    emitEmergency,
-    emitStartTrip,
-    emitEndTrip,
-    emitAdminBroadcast,
     joinOrganization,
+    emitLocation:       data  => emit('driver:location', data),
+    emitPassengerCount: (id, count) => emit('driver:passengerCount', { shuttleId: id, count }),
+    emitDelay:          (sid, rid, delay, msg) => emit('driver:delay', { shuttleId: sid, routeId: rid, estimatedDelay: delay, message: msg }),
+    emitEmergency:      (sid, lat, lng) => emit('driver:emergency', { shuttleId: sid, lat, lng }),
+    emitStartTrip:      (tid, sid, rid) => emit('driver:startTrip', { tripId: tid, shuttleId: sid, routeId: rid }),
+    emitEndTrip:        (sid, tid) => emit('driver:endTrip', { shuttleId: sid, tripId: tid }),
+    emitBroadcast:      (orgId, msg, type) => emit('admin:broadcast', { organizationId: orgId, message: msg, type }),
   };
 };
 

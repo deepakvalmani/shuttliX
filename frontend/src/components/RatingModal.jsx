@@ -55,7 +55,7 @@ const RatingModal = ({ trip, onClose, onSubmitted }) => {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.75)' }}>
       <div className="w-full max-w-sm rounded-2xl p-6 animate-slide-up"
-        style={{ background: 'var(--surface-2)', border: '1px solid var(--border-md)' }}>
+        style={{ background: 'var(--glass-2)', border: '1px solid var(--border-2)' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -85,7 +85,7 @@ const RatingModal = ({ trip, onClose, onSubmitted }) => {
                 size={36}
                 style={{
                   fill: n <= displayScore ? '#F59E0B' : 'transparent',
-                  color: n <= displayScore ? '#F59E0B' : 'var(--surface-4)',
+                  color: n <= displayScore ? '#F59E0B' : 'var(--glass-1)',
                   transition: 'all 0.1s',
                 }}
               />
@@ -104,8 +104,8 @@ const RatingModal = ({ trip, onClose, onSubmitted }) => {
               onClick={() => toggleTag(key)}
               className="text-xs px-3 py-1.5 rounded-full transition-all"
               style={{
-                background: selectedTags.includes(key) ? 'rgba(26,86,219,0.2)' : 'var(--surface-3)',
-                border: `1px solid ${selectedTags.includes(key) ? 'var(--brand)' : 'var(--border)'}`,
+                background: selectedTags.includes(key) ? 'rgba(26,86,219,0.2)' : 'var(--glass-2)',
+                border: `1px solid ${selectedTags.includes(key) ? 'var(--brand)' : 'var(--border-1)'}`,
                 color: selectedTags.includes(key) ? 'var(--brand)' : 'var(--text-3)',
               }}>
               {label}
@@ -128,7 +128,7 @@ const RatingModal = ({ trip, onClose, onSubmitted }) => {
           <button onClick={handleSubmit} disabled={isSubmitting || score === 0}
             className="btn-primary flex-1">
             {isSubmitting
-              ? <span className="dot-loader"><span /><span /><span /></span>
+              ? <span className="loader"><span /><span /><span /></span>
               : 'Submit rating'}
           </button>
         </div>

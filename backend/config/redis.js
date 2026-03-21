@@ -1,83 +1,47 @@
 const Redis = require('ioredis');
-let redis;
+
+let client;
 
 const connectRedis = () => {
-  redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-    retryStrategy: (times) => {
-      if (times > 5) {
-        console.error('❌ Redis connection failed after 5 retries.');
-        return null;
-      }
-      return Math.min(times * 500, 2000);
-    },
-    lazyConnect: false,
+  client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+    retryStrategy: times => (times > 5 ? null : Math.min(times * 500, 3000)),
     enableOfflineQueue: true,
+    lazyConnect: false,
   });
-  redis.on('connect', () => console.log('✅ Redis connected'));
-  redis.on('error', (err) => console.warn('⚠️ Redis error:', err.message));
-  return redis;
+  client.on('connect', () => console.log('✅ Redis connected'));
+  client.on('error', err => console.warn('⚠️  Redis:', err.message));
+  return client;
 };
 
-// ─── OTP functions ──────────────────────────────────────
-const setOTP = async (email, otp, expirySeconds = 300) => {
-  try {
-    await redis.setex(`otp:${email}`, expirySeconds, otp);
-  } catch (err) { console.warn('setOTP error:', err.message); }
+// ── Raw key store — caller passes the full key ──────────
+const set    = (key, value, ttlSeconds) => client.setex(key, ttlSeconds, String(value));
+const get    = key => client.get(key);
+const del    = key => client.del(key);
+
+// ── Shuttle position store ───────────────────────────────
+const setPosition = (shuttleId, data) =>
+  client.setex(`pos:${shuttleId}`, 30, JSON.stringify(data));
+
+const getPosition = async shuttleId => {
+  const raw = await client.get(`pos:${shuttleId}`);
+  return raw ? JSON.parse(raw) : null;
 };
 
-const getOTP = async (email) => {
-  try {
-    return await redis.get(`otp:${email}`);
-  } catch (err) { console.warn('getOTP error:', err.message); return null; }
+const getAllPositions = async () => {
+  const keys = await client.keys('pos:*');
+  if (!keys.length) return [];
+  const pipeline = client.pipeline();
+  keys.forEach(k => pipeline.get(k));
+  const results = await pipeline.exec();
+  return results.map(([, v]) => (v ? JSON.parse(v) : null)).filter(Boolean);
 };
 
-const deleteOTP = async (email) => {
-  try {
-    await redis.del(`otp:${email}`);
-  } catch (err) { console.warn('deleteOTP error:', err.message); }
-};
+const removePosition = shuttleId => client.del(`pos:${shuttleId}`);
 
-// ─── Shuttle position functions ─────────────────────────
-const setShuttlePosition = async (shuttleId, positionData) => {
-  try {
-    await redis.setex(`shuttle:${shuttleId}:position`, 30, JSON.stringify(positionData));
-  } catch (err) { console.warn('setShuttlePosition error:', err.message); }
-};
-
-const getShuttlePosition = async (shuttleId) => {
-  try {
-    const data = await redis.get(`shuttle:${shuttleId}:position`);
-    return data ? JSON.parse(data) : null;
-  } catch (err) { console.warn('getShuttlePosition error:', err.message); return null; }
-};
-
-const getAllActiveShuttles = async () => {
-  try {
-    const keys = await redis.keys('shuttle:*:position');
-    if (!keys.length) return [];
-    const pipeline = redis.pipeline();
-    keys.forEach(k => pipeline.get(k));
-    const results = await pipeline.exec();
-    return results.map(([err, val]) => (err || !val ? null : JSON.parse(val))).filter(Boolean);
-  } catch (err) { console.warn('getAllActiveShuttles error:', err.message); return []; }
-};
-
-const removeShuttlePosition = async (shuttleId) => {
-  try {
-    await redis.del(`shuttle:${shuttleId}:position`);
-  } catch (err) { console.warn('removeShuttlePosition error:', err.message); }
-};
-
-const getRedisClient = () => redis;
+const getClient = () => client;
 
 module.exports = {
-  connectRedis,
-  getRedisClient,
-  setShuttlePosition,
-  getShuttlePosition,
-  getAllActiveShuttles,
-  removeShuttlePosition,
-  setOTP,
-  getOTP,
-  deleteOTP,
+  connectRedis, getClient,
+  set, get, del,
+  setPosition, getPosition, getAllPositions, removePosition,
 };

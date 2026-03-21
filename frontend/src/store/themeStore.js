@@ -1,38 +1,32 @@
 import { create } from 'zustand';
 
-// Theme values: 'dark' | 'light' | 'system'
-const STORAGE_KEY = 'shutlix-theme';
-
-const getSystemTheme = () =>
+const getSystem = () =>
   window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 
-const applyTheme = (pref) => {
-  const resolved = pref === 'system' ? getSystemTheme() : pref;
-  document.documentElement.classList.toggle('dark', resolved === 'dark');
+const apply = pref => {
+  const resolved = pref === 'system' ? getSystem() : pref;
   document.documentElement.setAttribute('data-theme', resolved);
+  document.documentElement.classList.toggle('dark', resolved === 'dark');
 };
 
 const useThemeStore = create((set, get) => ({
-  preference: localStorage.getItem(STORAGE_KEY) || 'dark', // default dark
+  preference: localStorage.getItem('sx-theme') || 'dark',
   resolved: 'dark',
 
-  init: () => {
-    const pref = localStorage.getItem(STORAGE_KEY) || 'dark';
-    const resolved = pref === 'system' ? getSystemTheme() : pref;
-    applyTheme(pref);
-
-    // Listen for system changes
+  init() {
+    const pref     = localStorage.getItem('sx-theme') || 'dark';
+    const resolved = pref === 'system' ? getSystem() : pref;
+    apply(pref);
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      if (get().preference === 'system') applyTheme('system');
+      if (get().preference === 'system') apply('system');
     });
-
     set({ preference: pref, resolved });
   },
 
-  setTheme: (pref) => {
-    localStorage.setItem(STORAGE_KEY, pref);
-    applyTheme(pref);
-    const resolved = pref === 'system' ? getSystemTheme() : pref;
+  setTheme(pref) {
+    localStorage.setItem('sx-theme', pref);
+    const resolved = pref === 'system' ? getSystem() : pref;
+    apply(pref);
     set({ preference: pref, resolved });
   },
 }));
