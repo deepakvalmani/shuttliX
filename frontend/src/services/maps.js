@@ -15,6 +15,62 @@ export const haversineDistance = (lat1, lng1, lat2, lng2) => {
 };
 
 /**
+ * Fetch road route between two points using OSRM public API
+ * Returns array of [lat, lng] coordinates following actual roads
+ */
+export const fetchRoadRoute = async (startLat, startLng, endLat, endLng) => {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
+      // OSRM returns [lng, lat], convert to [lat, lng]
+      return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    }
+    return null;
+  } catch (error) {
+    console.error('Route fetch error:', error);
+    return null;
+  }
+};
+
+/**
+ * Fetch road route for multiple stops (optimized)
+ * Returns array of arrays of coordinates for each segment
+ */
+export const fetchRouteForStops = async (stops, progressCallback) => {
+  const allPaths = [];
+  
+  for (let i = 0; i < stops.length - 1; i++) {
+    const from = stops[i];
+    const to = stops[i + 1];
+    
+    const lat1 = from.stopId?.lat || from.lat;
+    const lng1 = from.stopId?.lng || from.lng;
+    const lat2 = to.stopId?.lat || to.lat;
+    const lng2 = to.stopId?.lng || to.lng;
+    
+    if (lat1 && lng1 && lat2 && lng2) {
+      const path = await fetchRoadRoute(lat1, lng1, lat2, lng2);
+      if (path && path.length > 0) {
+        allPaths.push(...path);
+      } else {
+        // Fallback to straight line
+        allPaths.push([lat1, lng1], [lat2, lng2]);
+      }
+    }
+    
+    // Progress callback
+    if (progressCallback) {
+      progressCallback((i + 1) / (stops.length - 1));
+    }
+  }
+  
+  return allPaths;
+};
+
+/**
  * Estimate ETA (minutes) from shuttle to stop
  * Uses average shuttle speed of 25 km/h on campus
  */

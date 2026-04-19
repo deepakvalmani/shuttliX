@@ -12,6 +12,7 @@ import {
   interpolatePosition,
   calculateBearing,
   getCapacityStatus,
+  fetchRoadRoute,
 } from '../services/maps';
 
 // Fix Leaflet's broken default icon path in Vite
@@ -93,6 +94,7 @@ const useLeafletMap = ({
   const polylineRefs   = useRef([]);
   const animationFrameRef = useRef(null);
   const currentThemeRef = useRef(getResolvedTheme());
+  const roadPathsRef = useRef({}); // Cache for road paths
 
   // ── INIT MAP ──────────────────────────────────────────────
   useEffect(() => {
@@ -143,55 +145,98 @@ const useLeafletMap = ({
     polylineRefs.current.forEach(p => p.remove());
     polylineRefs.current = [];
 
-    routes.forEach(route => {
-      const path = route.pathCoordinates?.length
-        ? route.pathCoordinates.map(c => [c.lat, c.lng])
-        : (route.stops || []).map(s => {
-            const lat = s.stopId?.lat || s.lat;
-            const lng = s.stopId?.lng || s.lng;
-            return lat && lng ? [lat, lng] : null;
-          }).filter(Boolean);
+    // Stop any existing animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
 
-      if (path.length < 2) return;
+    const drawRouteWithRoadPath = async () => {
+      for (const route of routes) {
+        const stops = route.stops || [];
+        if (stops.length < 2) continue;
 
-      const color = route.color || '#1A56DB';
+        const color = route.color || '#1A56DB';
+        const routeKey = route._id || route.name;
 
-      // Glow line (outer)
-      const glow = L.polyline(path, {
-        color,
-        weight: 12,
-        opacity: 0.1,
-      }).addTo(mapInstanceRef.current);
+        // Check cache first
+        let path = roadPathsRef.current[routeKey];
+        
+        if (!path) {
+          // Fetch road paths between all stops
+          const allPoints = [];
+          for (let i = 0; i < stops.length - 1; i++) {
+            const from = stops[i];
+            const to = stops[i + 1];
+            
+            const lat1 = from.stopId?.lat || from.lat;
+            const lng1 = from.stopId?.lng || from.lng;
+            const lat2 = to.stopId?.lat || to.lat;
+            const lng2 = to.stopId?.lng || to.lng;
+            
+            if (lat1 && lng1 && lat2 && lng2) {
+              const roadPath = await fetchRoadRoute(lat1, lng1, lat2, lng2);
+              if (roadPath && roadPath.length > 0) {
+                allPoints.push(...roadPath);
+              } else {
+                // Fallback to straight line
+                allPoints.push([lat1, lng1], [lat2, lng2]);
+              }
+            }
+          }
+          path = allPoints;
+          if (path.length > 0) {
+            roadPathsRef.current[routeKey] = path;
+          }
+        }
 
-      // Main line
-      const main = L.polyline(path, {
-        color,
-        weight: 4,
-        opacity: 0.9,
-        dashArray: null,
-      }).addTo(mapInstanceRef.current);
+        if (path.length < 2) continue;
 
-      // Animated dashed overlay
-      const animated = L.polyline(path, {
-        color: color,
-        weight: 2,
-        opacity: 0.6,
-        dashArray: '10, 10',
-        lineCap: 'round',
-        lineJoin: 'round',
-      }).addTo(mapInstanceRef.current);
+        // Glow line (outer)
+        const glow = L.polyline(path, {
+          color,
+          weight: 12,
+          opacity: 0.1,
+        }).addTo(mapInstanceRef.current);
 
-      // Animate the dash offset
-      let dashOffset = 0;
-      const animateDash = () => {
-        dashOffset -= 1;
-        animated.setStyle({ dashOffset: dashOffset });
+        // Main line
+        const main = L.polyline(path, {
+          color,
+          weight: 4,
+          opacity: 0.9,
+          dashArray: null,
+        }).addTo(mapInstanceRef.current);
+
+        // Animated dashed overlay
+        const animated = L.polyline(path, {
+          color: color,
+          weight: 2,
+          opacity: 0.6,
+          dashArray: '10, 10',
+          lineCap: 'round',
+          lineJoin: 'round',
+        }).addTo(mapInstanceRef.current);
+
+        polylineRefs.current.push(glow, main, animated);
+      }
+
+      // Start dash animation after all routes are drawn
+      if (polylineRefs.current.length > 0) {
+        let dashOffset = 0;
+        const animateDash = () => {
+          dashOffset -= 1;
+          polylineRefs.current.forEach((p, idx) => {
+            // Only animate the dashed lines (every 3rd one)
+            if (idx % 3 === 2) {
+              p.setStyle({ dashOffset: dashOffset });
+            }
+          });
+          animationFrameRef.current = requestAnimationFrame(animateDash);
+        };
         animationFrameRef.current = requestAnimationFrame(animateDash);
-      };
-      animationFrameRef.current = requestAnimationFrame(animateDash);
+      }
+    };
 
-      polylineRefs.current.push(glow, main, animated);
-    });
+    drawRouteWithRoadPath();
   }, [routes, mapInstanceRef.current]);
 
   // ── DRAW STOP MARKERS ─────────────────────────────────────
