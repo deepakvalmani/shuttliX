@@ -244,6 +244,7 @@ const StudentPage = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [announcements, setAnnouncements] = useState([]);
   const [showMap, setShowMap] = useState(true);
+  const [mapHeight, setMapHeight] = useState('50vh'); // Mobile: 50%, 70%, or 100%
   const [ratingTrip, setRatingTrip] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -310,6 +311,12 @@ const StudentPage = () => {
 
   // Load data
   useEffect(() => { fetchRoutes(); fetchStops(); }, []);
+
+  // Debug: log live shuttles changes
+  useEffect(() => {
+    console.log('[DEBUG] liveShuttles updated:', Object.keys(liveShuttles).length, 'shuttles');
+    console.log('[DEBUG] liveShuttles data:', liveShuttles);
+  }, [liveShuttles]);
 
   // Load history
   useEffect(() => {
@@ -734,7 +741,7 @@ const StudentPage = () => {
       </div>
 
       {/* ── MAP AREA ─────────────────────────────────────── */}
-      <div className={`flex-1 relative ${showMap ? 'flex' : 'hidden lg:flex'} flex-col`}>
+      <div className={`flex-1 relative ${showMap ? 'flex' : 'hidden lg:flex'} flex-col lg:h-auto`} style={{ height: mapHeight }}>
 
         {/* Back button */}
         <div className="absolute top-4 left-4 z-20 lg:hidden">
@@ -860,7 +867,18 @@ const StudentPage = () => {
           </div>
         )}
 
-        <div ref={mapRef} className="w-full h-full" onClick={() => setShowSearchResults(false)} />
+        {/* Map resize toggle - mobile only */}
+        <div className="absolute bottom-6 left-4 z-10 lg:hidden">
+          <button 
+            onClick={() => setMapHeight(h => h === '50vh' ? '70vh' : h === '70vh' ? '100vh' : '50vh')}
+            className="glass rounded-xl px-3 py-2 text-xs flex items-center gap-2"
+            style={{ color: 'var(--text-2)' }}
+          >
+            <span>⬆</span> {mapHeight === '50vh' ? 'Expand' : mapHeight === '70vh' ? 'More' : 'Collapse'}
+          </button>
+        </div>
+
+        <div ref={mapRef} className="w-full h-full min-h-0" onClick={() => setShowSearchResults(false)} />
       </div>
 
       {ratingTrip && (
