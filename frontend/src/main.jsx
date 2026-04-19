@@ -5,7 +5,7 @@ import { Toaster } from 'react-hot-toast';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { LoadingScreen } from './components/ui/index';
-import './styles/globals.css';
+import './styles/mobile.css';
 import useThemeStore from './store/themeStore';
 
 // Init theme before first render — prevents flash of wrong theme
