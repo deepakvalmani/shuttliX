@@ -7,7 +7,6 @@ const apply = pref => {
   const resolved = pref === 'system' ? getSystem() : pref;
   document.documentElement.setAttribute('data-theme', resolved);
   document.documentElement.classList.toggle('dark', resolved === 'dark');
-  return resolved;
 };
 
 const useThemeStore = create((set, get) => ({
@@ -16,7 +15,8 @@ const useThemeStore = create((set, get) => ({
 
   init() {
     const pref     = localStorage.getItem('sx-theme') || 'dark';
-    const resolved = apply(pref);
+    const resolved = pref === 'system' ? getSystem() : pref;
+    apply(pref);
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
       if (get().preference === 'system') apply('system');
     });
@@ -25,7 +25,8 @@ const useThemeStore = create((set, get) => ({
 
   setTheme(pref) {
     localStorage.setItem('sx-theme', pref);
-    const resolved = apply(pref);
+    const resolved = pref === 'system' ? getSystem() : pref;
+    apply(pref);
     set({ preference: pref, resolved });
   },
 }));

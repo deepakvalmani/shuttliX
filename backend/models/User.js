@@ -1,79 +1,135 @@
-'use strict';
 const mongoose = require('mongoose');
 const bcrypt   = require('bcryptjs');
 
-const sessionSchema = new mongoose.Schema({
-  refreshToken: { type: String, required: true },
-  deviceInfo:   { type: String, default: '' },
-  ip:           { type: String, default: '' },
-  lastUsed:     { type: Date, default: Date.now },
-}, { _id: true });
-
 const userSchema = new mongoose.Schema({
-  name:           { type: String, required: true, trim: true, maxlength: 100 },
-  email:          { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password:       { type: String, required: true, select: false, minlength: 8 },
-  role:           { type: String, enum: ['student','driver','admin','superadmin'], required: true },
-  organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization' },
-  studentId:      { type: String },
-  licenseNumber:  { type: String },
-  profilePicture: { type: String },
-  isVerified:     { type: Boolean, default: false },
-  isActive:       { type: Boolean, default: true },
-  sessions:       [sessionSchema],
-  loginAttempts:  { type: Number, default: 0 },
-  lockUntil:      { type: Date },
-  // GDPR
-  consentGivenAt: { type: Date, default: Date.now },
-  dataDeletedAt:  { type: Date },
-}, { timestamps: true });
+  name: {
+    type: String, required: true, trim: true,
+    minlength: 2, maxlength: 60,
+  },
+  email: {
+    type: String, required: true, unique: true,
+    lowercase: true, trim: true,
+    match: [/^\S+@\S+\.\S+$/, 'Invalid email'],
+  },
+  password: {
+    type: String, required: true, minlength: 8, select: false,
+  },
+  role: {
+    type: String,
+    enum: ['student', 'driver', 'admin', 'superadmin'],
+    default: 'student',
+  },
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId, ref: 'Organization',
+    required() { return this.role !== 'superadmin'; },
+  },
 
-userSchema.index({ email: 1 });
+  // ── Status ─────────────────────────────────────────────
+  isActive:   { type: Boolean, default: true },
+  isVerified: { type: Boolean, default: false },
+
+  // ── Account lockout ─────────────────────────────────────
+  loginAttempts: { type: Number, default: 0, select: false },
+  lockUntil:     { type: Date,   default: null, select: false },
+
+  // ── Tokens ──────────────────────────────────────────────
+  refreshToken:      { type: String, select: false },
+  passwordChangedAt: Date,
+
+  // ── Session tracking ────────────────────────────────────
+  lastLoginAt:     Date,
+  lastLoginIP:     String,
+  lastLoginDevice: String,
+
+  // ── Student fields ──────────────────────────────────────
+  studentId:      { type: String, trim: true },
+  favoriteStops:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'Stop' }],
+
+  // ── Driver fields ────────────────────────────────────────
+  licenseNumber:     { type: String, trim: true },
+  assignedShuttleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Shuttle', default: null },
+  assignedRouteId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Route',   default: null },
+  isOnDuty:          { type: Boolean, default: false },
+  totalTrips:        { type: Number, default: 0 },
+  avgRating:         { type: Number, default: 0 },
+  totalRatings:      { type: Number, default: 0 },
+
+  // ── Notifications ────────────────────────────────────────
+  notificationPreferences: {
+    shuttleArriving:    { type: Boolean, default: true },
+    delays:             { type: Boolean, default: true },
+    announcements:      { type: Boolean, default: true },
+  },
+
+  profilePicture: { type: String, default: null },
+}, { timestamps: true, toJSON: { virtuals: true } });
+
+// ── Indexes ─────────────────────────────────────────────
 userSchema.index({ organizationId: 1, role: 1 });
-userSchema.index({ 'sessions.refreshToken': 1 });
+userSchema.index({ organizationId: 1, isActive: 1 });
 
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, parseInt(process.env.BCRYPT_SALT_ROUNDS || '12'));
-  next();
-});
-
-userSchema.methods.comparePassword = function(plain) {
-  return bcrypt.compare(plain, this.password);
-};
-
-userSchema.virtual('isLocked').get(function() {
+// ── Virtual ─────────────────────────────────────────────
+userSchema.virtual('isLocked').get(function () {
   return !!(this.lockUntil && this.lockUntil > Date.now());
 });
 
-userSchema.methods.addLoginAttempt = async function() {
-  const MAX = 5, LOCK_MS = 15 * 60 * 1000;
+// ── Hash password before save ────────────────────────────
+userSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next();
+  const rounds = parseInt(process.env.BCRYPT_SALT_ROUNDS, 10) || 12;
+  this.password = await bcrypt.hash(this.password, rounds);
+  this.passwordChangedAt = Date.now() - 1000;
+  next();
+});
+
+// ── Instance methods ────────────────────────────────────
+userSchema.methods.comparePassword = function (candidate) {
+  return bcrypt.compare(candidate, this.password);
+};
+
+userSchema.methods.incLoginAttempts = async function () {
+  // Reset if old lock expired
   if (this.lockUntil && this.lockUntil < Date.now()) {
-    this.loginAttempts = 1; this.lockUntil = undefined;
-  } else {
-    this.loginAttempts += 1;
-    if (this.loginAttempts >= MAX) this.lockUntil = new Date(Date.now() + LOCK_MS);
+    return this.updateOne({ $set: { loginAttempts: 1 }, $unset: { lockUntil: 1 } });
   }
-  return this.save();
-};
-
-userSchema.methods.resetLoginAttempts = function() {
-  this.loginAttempts = 0; this.lockUntil = undefined;
-  return this.save();
-};
-
-userSchema.methods.addSession = function(refreshToken, deviceInfo = '', ip = '') {
-  if (this.sessions.length >= 5) {
-    this.sessions.sort((a, b) => a.lastUsed - b.lastUsed);
-    this.sessions.shift();
+  const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS, 10) || 5;
+  const lockMin     = parseInt(process.env.LOCK_DURATION_MINUTES, 10) || 15;
+  const updates = { $inc: { loginAttempts: 1 } };
+  if (this.loginAttempts + 1 >= maxAttempts && !this.isLocked) {
+    updates.$set = { lockUntil: new Date(Date.now() + lockMin * 60 * 1000) };
   }
-  this.sessions.push({ refreshToken, deviceInfo, ip });
-  return this.save();
+  return this.updateOne(updates);
 };
 
-userSchema.methods.removeSession = function(refreshToken) {
-  this.sessions = this.sessions.filter(s => s.refreshToken !== refreshToken);
-  return this.save();
+userSchema.methods.resetLoginAttempts = function () {
+  return this.updateOne({ $set: { loginAttempts: 0 }, $unset: { lockUntil: 1 } });
+};
+
+userSchema.methods.toPublicJSON = function () {
+  return {
+    id: this._id,
+    name: this.name,
+    email: this.email,
+    role: this.role,
+    organizationId: this.organizationId,
+    profilePicture: this.profilePicture,
+    isActive: this.isActive,
+    isVerified: this.isVerified,
+    studentId: this.studentId,
+    licenseNumber: this.licenseNumber,
+    assignedShuttleId: this.assignedShuttleId,
+    assignedRouteId: this.assignedRouteId,
+    isOnDuty: this.isOnDuty,
+    totalTrips: this.totalTrips,
+    avgRating: this.avgRating,
+    totalRatings: this.totalRatings,
+    favoriteStops: this.favoriteStops,
+    notificationPreferences: this.notificationPreferences,
+    lastLoginAt: this.lastLoginAt,
+    lastLoginIP: this.lastLoginIP,
+    lastLoginDevice: this.lastLoginDevice,
+    createdAt: this.createdAt,
+  };
 };
 
 module.exports = mongoose.model('User', userSchema);
