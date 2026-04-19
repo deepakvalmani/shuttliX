@@ -1,47 +1,25 @@
-const Redis = require('ioredis');
-
+'use strict';
+const Redis  = require('ioredis');
+const logger = require('../utils/logger');
 let client;
-
-const connectRedis = () => {
-  client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-    retryStrategy: times => (times > 5 ? null : Math.min(times * 500, 3000)),
-    enableOfflineQueue: true,
-    lazyConnect: false,
-  });
-  client.on('connect', () => console.log('✅ Redis connected'));
-  client.on('error', err => console.warn('⚠️  Redis:', err.message));
+const connectRedis = async () => {
+  client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', { maxRetriesPerRequest: 3 });
+  client.on('connect', ()  => logger.info('Redis connected'));
+  client.on('error',   err => logger.error({ msg: 'Redis error', err }));
+  await client.ping();
   return client;
 };
-
-// ── Raw key store — caller passes the full key ──────────
-const set    = (key, value, ttlSeconds) => client.setex(key, ttlSeconds, String(value));
-const get    = key => client.get(key);
-const del    = key => client.del(key);
-
-// ── Shuttle position store ───────────────────────────────
-const setPosition = (shuttleId, data) =>
-  client.setex(`pos:${shuttleId}`, 30, JSON.stringify(data));
-
-const getPosition = async shuttleId => {
-  const raw = await client.get(`pos:${shuttleId}`);
-  return raw ? JSON.parse(raw) : null;
-};
-
+const TTL = 35;
+const setPosition    = (id, d) => client.setex(`pos:${id}`, TTL, JSON.stringify(d));
+const getPosition    = async id => { const r = await client.get(`pos:${id}`); return r ? JSON.parse(r) : null; };
+const removePosition = id => client.del(`pos:${id}`);
 const getAllPositions = async () => {
   const keys = await client.keys('pos:*');
   if (!keys.length) return [];
-  const pipeline = client.pipeline();
-  keys.forEach(k => pipeline.get(k));
-  const results = await pipeline.exec();
-  return results.map(([, v]) => (v ? JSON.parse(v) : null)).filter(Boolean);
+  const vals = await client.mget(...keys);
+  return vals.filter(Boolean).map(v => JSON.parse(v));
 };
-
-const removePosition = shuttleId => client.del(`pos:${shuttleId}`);
-
-const getClient = () => client;
-
-module.exports = {
-  connectRedis, getClient,
-  set, get, del,
-  setPosition, getPosition, getAllPositions, removePosition,
-};
+const setOTP = (k, code, ttl = 300) => client.setex(`otp:${k}`, ttl, code);
+const getOTP = k => client.get(`otp:${k}`);
+const delOTP = k => client.del(`otp:${k}`);
+module.exports = Object.assign(connectRedis, { getClient: () => client, setPosition, getPosition, removePosition, getAllPositions, setOTP, getOTP, delOTP });

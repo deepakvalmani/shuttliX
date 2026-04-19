@@ -1,65 +1,42 @@
 import { create } from 'zustand';
-import api from '../services/api';
 
 const useShuttleStore = create((set, get) => ({
-  liveShuttles:  {},
-  routes:        [],
-  stops:         [],
-  selectedShuttle: null,
-  isLoadingRoutes: false,
-  isLoadingStops:  false,
-  lastUpdated: null,
+  liveShuttles: {},   // { [shuttleId]: positionData }
 
-  updateShuttlePosition: pos =>
-    set(s => ({
-      liveShuttles: { ...s.liveShuttles, [pos.shuttleId]: { ...pos, receivedAt: Date.now() } },
-      lastUpdated: Date.now(),
-    })),
-
-  setAllPositions: positions => {
-    const mapped = {};
-    positions.forEach(p => { mapped[p.shuttleId] = { ...p, receivedAt: Date.now() }; });
-    set({ liveShuttles: mapped, lastUpdated: Date.now() });
+  updateShuttlePosition: (pos) => {
+    if (!pos?.shuttleId) return;
+    set(state => ({
+      liveShuttles: { ...state.liveShuttles, [pos.shuttleId]: pos },
+    }));
   },
 
-  removeShuttle: shuttleId => {
-    set(s => {
-      const next = { ...s.liveShuttles };
+  setAllPositions: (positions) => {
+    const map = {};
+    (positions || []).forEach(p => { if (p?.shuttleId) map[p.shuttleId] = p; });
+    set({ liveShuttles: map });
+  },
+
+  removeShuttle: (shuttleId) => {
+    set(state => {
+      const next = { ...state.liveShuttles };
       delete next[shuttleId];
       return { liveShuttles: next };
     });
   },
 
-  updateCapacity: (shuttleId, passengerCount) =>
-    set(s => {
-      if (!s.liveShuttles[shuttleId]) return s;
+  updateCapacity: (shuttleId, passengerCount) => {
+    set(state => {
+      if (!state.liveShuttles[shuttleId]) return {};
       return {
         liveShuttles: {
-          ...s.liveShuttles,
-          [shuttleId]: { ...s.liveShuttles[shuttleId], passengerCount },
+          ...state.liveShuttles,
+          [shuttleId]: { ...state.liveShuttles[shuttleId], passengerCount },
         },
       };
-    }),
-
-  fetchRoutes: async () => {
-    set({ isLoadingRoutes: true });
-    try {
-      const { data } = await api.get('/student/routes');
-      set({ routes: data.data, isLoadingRoutes: false });
-    } catch { set({ isLoadingRoutes: false }); }
+    });
   },
 
-  fetchStops: async () => {
-    set({ isLoadingStops: true });
-    try {
-      const { data } = await api.get('/student/stops');
-      set({ stops: data.data, isLoadingStops: false });
-    } catch { set({ isLoadingStops: false }); }
-  },
-
-  selectShuttle: shuttle => set({ selectedShuttle: shuttle }),
-  getLiveShuttlesArray: () => Object.values(get().liveShuttles),
-  getRouteForShuttle: routeId => get().routes.find(r => r._id === routeId) || null,
+  clearAll: () => set({ liveShuttles: {} }),
 }));
 
 export default useShuttleStore;

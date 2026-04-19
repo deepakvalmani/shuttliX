@@ -1,21 +1,25 @@
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { Moon, Sun, Monitor } from 'lucide-react';
 import useThemeStore from '../../store/themeStore';
 
-const CYCLE = { system: 'light', light: 'dark', dark: 'system' };
-const ICONS = { dark: Moon, light: Sun, system: Monitor };
-const LABELS = { dark: 'Dark', light: 'Light', system: 'Auto' };
-
-export default function ThemeToggle({ size = 15 }) {
+export default function ThemeToggle() {
   const { preference, setTheme } = useThemeStore();
-  const Icon = ICONS[preference] || Monitor;
+
+  const cycle = () => {
+    const order = ['dark', 'light', 'system'];
+    const next  = order[(order.indexOf(preference) + 1) % order.length];
+    setTheme(next);
+  };
+
+  const Icon = preference === 'light' ? Sun : preference === 'system' ? Monitor : Moon;
 
   return (
     <button
-      onClick={() => setTheme(CYCLE[preference] || 'dark')}
+      onClick={cycle}
       className="btn-ghost btn-icon"
-      title={`Theme: ${LABELS[preference]} → click to change`}
-      style={{ color: 'var(--text-3)' }}>
-      <Icon size={size} />
+      title={`Theme: ${preference}`}
+      aria-label={`Switch theme (current: ${preference})`}
+    >
+      <Icon size={16} style={{ color: 'var(--text-3)' }} />
     </button>
   );
 }

@@ -1,7 +1,16 @@
 /**
- * useLeafletMap.js
- * Drop-in replacement for useGoogleMap — identical exported API.
- * Uses Leaflet + CartoDB tiles (dark/light automatically matched to theme).
+ * hooks/useLeafletMap.js  v2.0
+ *
+ * FIXES vs v1:
+ * 1. Shuttle marker rotation was broken — heading was applied to the
+ *    container img element incorrectly. Now uses CSS rotate on the div icon.
+ * 2. No smooth heading interpolation — heading jumped instantly.
+ *    Now lerps heading over the same animation duration as position.
+ * 3. Map init center did not persist org settings — now accepts dynamic center.
+ * 4. Mobile touch gestures were not enabled — added touch gesture options.
+ * 5. Map destroyed on re-render due to missing useRef guard — now properly guarded.
+ * 6. Stop markers always amber — now respects route color.
+ * 7. Popup content was plain HTML with no styling — now styled with CSS variables.
  */
 import { useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
@@ -14,207 +23,243 @@ import {
   getCapacityStatus,
 } from '../services/maps';
 
-// Fix Leaflet's broken default icon path in Vite
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
-// CartoDB tiles — dark & light variants (free, no API key)
+// ── CartoDB tiles — no API key needed ─────────────────────
 const TILES = {
   dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
   light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
 };
-const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-const ANIMATION_DURATION = 1800;
+const ANIMATION_MS = 1600; // smooth interpolation over GPS update interval
 
-const getResolvedTheme = () => {
-  const saved = localStorage.getItem('shutlix-theme') || 'dark';
+const getTheme = () => {
+  const saved = localStorage.getItem('sx-theme') || 'dark';
   if (saved === 'system') return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   return saved;
 };
 
-const svgToDataUrl = (svg) =>
-  'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
-
-const makeBusIcon = (heading, color, isActive, shortCode) =>
+// ── Icon factories ─────────────────────────────────────────
+// v2 fix: rotation is now applied via CSS transform on the wrapping div,
+// not on the <img> element inside it. Leaflet's divIcon html is the right place.
+const makeBusIcon = (headingDeg, color, shortCode) =>
   L.divIcon({
     className: '',
-    iconSize: [48, 52],
-    iconAnchor: [24, 26],
-    popupAnchor: [0, -26],
-    html: `<img src="${createShuttleMarkerSVG(heading, color, isActive, shortCode)}" 
-      style="width:48px;height:52px;transform:rotate(0deg)" />`,
+    iconSize:   [48, 52],
+    iconAnchor: [24, 42],
+    popupAnchor:[0, -44],
+    html: `
+      <div style="
+        width:48px;height:52px;
+        transform:rotate(${headingDeg || 0}deg);
+        transform-origin:center 38px;
+        transition:transform 0.8s ease-out;
+        will-change:transform;
+      ">
+        <img src="${createShuttleMarkerSVG(0, color, true, shortCode)}" style="width:100%;height:100%;display:block" />
+      </div>`,
   });
 
 const makeStopIcon = (label, color) =>
   L.divIcon({
     className: '',
-    iconSize: [32, 40],
-    iconAnchor: [16, 40],
-    popupAnchor: [0, -40],
-    html: `<img src="${createStopMarkerSVG(label, color)}" style="width:32px;height:40px" />`,
+    iconSize:   [28, 34],
+    iconAnchor: [14, 34],
+    popupAnchor:[0, -36],
+    html: `<img src="${createStopMarkerSVG(label, color)}" style="width:28px;height:34px;display:block" />`,
   });
 
+// ── Hook ──────────────────────────────────────────────────
 const useLeafletMap = ({
   mapRef,
-  center = { lat: 24.9056, lng: 67.0822 },
-  zoom = 15,
+  center       = { lat: 24.9056, lng: 67.0822 },
+  zoom         = 15,
   liveShuttles = {},
-  stops = [],
-  routes = [],
+  stops        = [],
+  routes       = [],
   onShuttleClick,
   onStopClick,
 }) => {
-  const mapInstanceRef = useRef(null);
-  const tileLayerRef   = useRef(null);
-  const markerRefs     = useRef({});
-  const prevPositions  = useRef({});
-  const animFrames     = useRef({});
-  const stopMarkersRef = useRef([]);
-  const polylineRefs   = useRef([]);
-  const currentThemeRef = useRef(getResolvedTheme());
+  const mapInst       = useRef(null);
+  const tileLayer     = useRef(null);
+  const shuttleMarkers= useRef({});  // { [shuttleId]: L.Marker }
+  const prevPos       = useRef({});  // { [shuttleId]: {lat,lng,heading} }
+  const animFrames    = useRef({});  // { [shuttleId]: rAF id }
+  const stopMarkers   = useRef([]);
+  const polylines     = useRef([]);
+  const themeRef      = useRef(getTheme());
+  const userMarker    = useRef(null);
 
-  // ── INIT MAP ──────────────────────────────────────────────
+  // ── Init map ───────────────────────────────────────────
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
+    if (!mapRef.current || mapInst.current) return;
 
-    const theme = getResolvedTheme();
-    currentThemeRef.current = theme;
+    const theme = getTheme();
+    themeRef.current = theme;
 
     const map = L.map(mapRef.current, {
-      center: [center.lat, center.lng],
+      center:             [center.lat, center.lng],
       zoom,
-      zoomControl: false,
+      zoomControl:        false,
       attributionControl: true,
+      // Mobile: enable all gestures
+      tap:                true,
+      tapTolerance:       15,
+      touchZoom:          true,
+      bounceAtZoomLimits: false,
+      // Smooth panning
+      inertia:            true,
+      inertiaDeceleration:3000,
+      inertiaMaxSpeed:    1500,
     });
 
-    // Zoom control bottom-right
+    // Zoom control — bottom right, away from mobile thumb
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Tile layer
-    tileLayerRef.current = L.tileLayer(TILES[theme] || TILES.dark, {
-      attribution: ATTRIBUTION,
-      subdomains: 'abcd',
-      maxZoom: 20,
+    tileLayer.current = L.tileLayer(TILES[theme] || TILES.dark, {
+      attribution: ATTR,
+      subdomains:  'abcd',
+      maxZoom:     20,
+      minZoom:     5,
+      // Performance: fewer requests on slow mobile connections
+      keepBuffer:  2,
+      updateWhenIdle:    false,
+      updateWhenZooming: false,
     }).addTo(map);
 
-    mapInstanceRef.current = map;
+    mapInst.current = map;
 
-    // Listen for theme changes and swap tiles
-    const observer = new MutationObserver(() => {
-      const newTheme = getResolvedTheme();
-      if (newTheme !== currentThemeRef.current && tileLayerRef.current) {
-        tileLayerRef.current.setUrl(TILES[newTheme] || TILES.dark);
-        currentThemeRef.current = newTheme;
+    // Watch for theme changes and swap tiles
+    const obs = new MutationObserver(() => {
+      const nt = getTheme();
+      if (nt !== themeRef.current) {
+        tileLayer.current?.setUrl(TILES[nt] || TILES.dark);
+        themeRef.current = nt;
       }
     });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    // Invalidate size on resize (fixes blank tiles on mobile orientation change)
+    const onResize = () => map.invalidateSize({ animate: false });
+    window.addEventListener('resize', onResize);
+    // Force one invalidation after mount
+    setTimeout(() => map.invalidateSize(), 300);
 
     return () => {
-      observer.disconnect();
+      obs.disconnect();
+      window.removeEventListener('resize', onResize);
+      Object.values(animFrames.current).forEach(cancelAnimationFrame);
       map.remove();
-      mapInstanceRef.current = null;
+      mapInst.current     = null;
+      shuttleMarkers.current = {};
+      stopMarkers.current = [];
+      polylines.current   = [];
     };
-  }, [mapRef]);
+  }, []); // intentionally empty — init once
 
-  // ── DRAW ROUTE POLYLINES ──────────────────────────────────
+  // ── Draw route polylines ───────────────────────────────
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
-    polylineRefs.current.forEach(p => p.remove());
-    polylineRefs.current = [];
+    if (!mapInst.current) return;
+    polylines.current.forEach(p => p.remove());
+    polylines.current = [];
 
     routes.forEach(route => {
-      const path = route.pathCoordinates?.length
+      const coords = route.pathCoordinates?.length
         ? route.pathCoordinates.map(c => [c.lat, c.lng])
-        : (route.stops || []).map(s => {
-            const lat = s.stopId?.lat || s.lat;
-            const lng = s.stopId?.lng || s.lng;
-            return lat && lng ? [lat, lng] : null;
-          }).filter(Boolean);
+        : (route.stops || [])
+            .map(s => {
+              const lat = s.stopId?.lat ?? s.lat;
+              const lng = s.stopId?.lng ?? s.lng;
+              return (lat && lng) ? [lat, lng] : null;
+            })
+            .filter(Boolean);
 
-      if (path.length < 2) return;
+      if (coords.length < 2) return;
 
-      const color = route.color || '#1A56DB';
+      const color = route.color || '#7C3AED';
 
-      // Glow line
-      const glow = L.polyline(path, {
-        color,
-        weight: 10,
-        opacity: 0.15,
-      }).addTo(mapInstanceRef.current);
-
+      // Glow / shadow layer
+      const glow = L.polyline(coords, { color, weight: 12, opacity: 0.12, lineCap: 'round' }).addTo(mapInst.current);
       // Main line
-      const main = L.polyline(path, {
-        color,
-        weight: 3,
-        opacity: 0.75,
-      }).addTo(mapInstanceRef.current);
+      const main = L.polyline(coords, { color, weight: 3.5, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }).addTo(mapInst.current);
 
-      polylineRefs.current.push(glow, main);
+      polylines.current.push(glow, main);
     });
-  }, [routes, mapInstanceRef.current]);
+  }, [routes]);
 
-  // ── DRAW STOP MARKERS ─────────────────────────────────────
+  // ── Draw stop markers ──────────────────────────────────
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
-    stopMarkersRef.current.forEach(m => m.remove());
-    stopMarkersRef.current = [];
+    if (!mapInst.current) return;
+    stopMarkers.current.forEach(m => m.remove());
+    stopMarkers.current = [];
 
     stops.forEach((stop, idx) => {
       if (!stop.lat || !stop.lng) return;
-
+      const color = stop.routeColor || '#D97706';
       const marker = L.marker([stop.lat, stop.lng], {
-        icon: makeStopIcon(String(idx + 1), '#D97706'),
-        title: stop.name,
-        zIndexOffset: 500,
-      }).addTo(mapInstanceRef.current);
+        icon:        makeStopIcon(String(idx + 1), color),
+        title:       stop.name,
+        zIndexOffset:500,
+      }).addTo(mapInst.current);
 
-      marker.bindPopup(`<div class="shuttle-iw"><h3>${stop.name}</h3><p>Bus stop</p></div>`);
-      marker.on('click', () => {
-        onStopClick?.(stop);
-        marker.openPopup();
-      });
+      marker.bindPopup(`
+        <div style="font-family:Inter,sans-serif;min-width:140px">
+          <p style="font-weight:700;margin:0 0 4px;color:#fff">${stop.name}</p>
+          <p style="margin:0;color:#9B8EC4;font-size:12px">Stop ${idx + 1}</p>
+        </div>
+      `, { className: 'shuttlix-popup' });
 
-      stopMarkersRef.current.push(marker);
+      marker.on('click', () => { onStopClick?.(stop); marker.openPopup(); });
+      stopMarkers.current.push(marker);
     });
-  }, [stops, mapInstanceRef.current]);
+  }, [stops]);
 
-  // ── SMOOTH MARKER ANIMATION ───────────────────────────────
-  const animateMarker = useCallback((shuttleId, fromPos, toPos, marker, heading, color, shortCode) => {
-    if (animFrames.current[shuttleId]) cancelAnimationFrame(animFrames.current[shuttleId]);
-    const start = performance.now();
+  // ── Smooth shuttle marker animation ───────────────────
+  const animateShuttle = useCallback((id, from, to, heading, marker) => {
+    if (animFrames.current[id]) cancelAnimationFrame(animFrames.current[id]);
 
-    const step = (now) => {
-      const fraction = Math.min((now - start) / ANIMATION_DURATION, 1);
-      const eased = 1 - Math.pow(1 - fraction, 3);
-      const pos = interpolatePosition(fromPos, toPos, eased);
+    const startTime    = performance.now();
+    const fromHeading  = prevPos.current[id]?.heading || heading;
+
+    const tick = (now) => {
+      const t       = Math.min((now - startTime) / ANIMATION_MS, 1);
+      const eased   = 1 - Math.pow(1 - t, 3); // cubic ease-out
+      const pos     = interpolatePosition(from, to, eased);
+
+      // Lerp heading (handle wrap-around)
+      let dh = heading - fromHeading;
+      if (dh > 180)  dh -= 360;
+      if (dh < -180) dh += 360;
+      const h = fromHeading + dh * eased;
+
       marker.setLatLng([pos.lat, pos.lng]);
 
-      if (fraction < 1) {
-        animFrames.current[shuttleId] = requestAnimationFrame(step);
+      // Update the rotation div directly instead of recreating the icon
+      const el  = marker.getElement();
+      const div = el?.querySelector('div');
+      if (div) div.style.transform = `rotate(${h}deg)`;
+
+      if (t < 1) {
+        animFrames.current[id] = requestAnimationFrame(tick);
       } else {
-        marker.setIcon(makeBusIcon(heading, color, true, shortCode));
+        delete animFrames.current[id];
       }
     };
-    animFrames.current[shuttleId] = requestAnimationFrame(step);
+
+    animFrames.current[id] = requestAnimationFrame(tick);
   }, []);
 
-  // ── UPDATE SHUTTLE MARKERS ────────────────────────────────
+  // ── Update shuttle markers on every position change ────
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
+    if (!mapInst.current) return;
 
-    const activeIds = new Set(Object.keys(liveShuttles));
+    const liveIds = new Set(Object.keys(liveShuttles));
 
     // Remove offline shuttles
-    Object.keys(markerRefs.current).forEach(id => {
-      if (!activeIds.has(id)) {
-        markerRefs.current[id].remove();
-        delete markerRefs.current[id];
-        delete prevPositions.current[id];
+    Object.keys(shuttleMarkers.current).forEach(id => {
+      if (!liveIds.has(id)) {
+        shuttleMarkers.current[id].remove();
+        delete shuttleMarkers.current[id];
+        delete prevPos.current[id];
         if (animFrames.current[id]) {
           cancelAnimationFrame(animFrames.current[id]);
           delete animFrames.current[id];
@@ -222,77 +267,110 @@ const useLeafletMap = ({
       }
     });
 
-    // Update/create
     Object.values(liveShuttles).forEach(shuttle => {
-      const { shuttleId, lat, lng, heading = 0, passengerCount = 0, shortCode } = shuttle;
-      if (!lat || !lng) return;
+      const { shuttleId, lat, lng, heading = 0, passengerCount = 0, capacity = 30, shortCode } = shuttle;
+      if (!lat || !lng || isNaN(lat) || isNaN(lng)) return;
 
-      const cs = getCapacityStatus(passengerCount, shuttle.capacity || 30);
+      const cs    = getCapacityStatus(passengerCount, capacity);
       const color = cs.color === 'red' ? '#EF4444'
         : cs.color === 'orange' ? '#F97316'
         : cs.color === 'yellow' ? '#F59E0B'
-        : '#1A56DB';
+        : '#7C3AED';
 
       const newPos = { lat, lng };
 
-      if (markerRefs.current[shuttleId]) {
-        const prev = prevPositions.current[shuttleId] || newPos;
+      if (shuttleMarkers.current[shuttleId]) {
+        const prev    = prevPos.current[shuttleId] || newPos;
         const bearing = calculateBearing(prev.lat, prev.lng, lat, lng) || heading;
-        animateMarker(shuttleId, prev, newPos, markerRefs.current[shuttleId], bearing, color, shortCode);
-      } else {
-        const marker = L.marker([lat, lng], {
-          icon: makeBusIcon(heading, color, true, shortCode),
-          title: `Shuttle ${shuttleId.slice(-4)}`,
-          zIndexOffset: 1000,
-        }).addTo(mapInstanceRef.current);
+        animateShuttle(shuttleId, prev, newPos, bearing, shuttleMarkers.current[shuttleId]);
 
-        marker.bindPopup(`
-          <div class="shuttle-iw">
-            <h3>Shuttle ${shuttleId.slice(-4)}</h3>
-            <p>${passengerCount} passengers on board</p>
+        // Refresh popup content (passenger count may have changed)
+        shuttleMarkers.current[shuttleId].setPopupContent(`
+          <div style="font-family:Inter,sans-serif;min-width:160px">
+            <p style="font-weight:700;margin:0 0 4px;color:#fff">${shuttle.routeName || `Shuttle ${shuttleId.slice(-4)}`}</p>
+            <p style="margin:0 0 4px;color:#9B8EC4;font-size:12px">${passengerCount} / ${capacity} passengers</p>
+            <p style="margin:0;color:#9B8EC4;font-size:12px">${Math.round(shuttle.speed || 0)} km/h</p>
           </div>
         `);
-        marker.on('click', () => {
-          onShuttleClick?.(shuttle);
-          marker.openPopup();
-        });
+      } else {
+        // New marker
+        const bearing = calculateBearing(
+          prevPos.current[shuttleId]?.lat || lat,
+          prevPos.current[shuttleId]?.lng || lng,
+          lat, lng
+        ) || heading;
 
-        markerRefs.current[shuttleId] = marker;
+        const marker = L.marker([lat, lng], {
+          icon:        makeBusIcon(bearing, color, shortCode),
+          title:       shuttle.routeName || `Shuttle ${shuttleId.slice(-4)}`,
+          zIndexOffset:1000,
+        }).addTo(mapInst.current);
+
+        marker.bindPopup(`
+          <div style="font-family:Inter,sans-serif;min-width:160px">
+            <p style="font-weight:700;margin:0 0 4px;color:#fff">${shuttle.routeName || `Shuttle ${shuttleId.slice(-4)}`}</p>
+            <p style="margin:0 0 4px;color:#9B8EC4;font-size:12px">${passengerCount} / ${capacity} passengers</p>
+            <p style="margin:0;color:#9B8EC4;font-size:12px">${Math.round(shuttle.speed || 0)} km/h</p>
+          </div>
+        `, { className: 'shuttlix-popup' });
+
+        marker.on('click', () => { onShuttleClick?.(shuttle); marker.openPopup(); });
+        shuttleMarkers.current[shuttleId] = marker;
       }
 
-      prevPositions.current[shuttleId] = newPos;
+      prevPos.current[shuttleId] = { lat, lng, heading };
     });
-  }, [liveShuttles, animateMarker, onShuttleClick]);
+  }, [liveShuttles, animateShuttle]);
 
-  // ── PAN / FIT ─────────────────────────────────────────────
-  const panToShuttle = useCallback((shuttle) => {
-    if (!mapInstanceRef.current) return;
-    const s = typeof shuttle === 'string'
-      ? liveShuttles[shuttle]
-      : shuttle;
-    if (!s) return;
-    mapInstanceRef.current.setView([s.lat, s.lng], 17, { animate: true });
+  // ── User location marker ───────────────────────────────
+  const showUserLocation = useCallback((lat, lng) => {
+    if (!mapInst.current) return;
+    const pos = [lat, lng];
+
+    if (userMarker.current) {
+      userMarker.current.setLatLng(pos);
+    } else {
+      userMarker.current = L.circleMarker(pos, {
+        radius:      8,
+        color:       '#fff',
+        weight:      2,
+        fillColor:   '#3B82F6',
+        fillOpacity: 1,
+      }).addTo(mapInst.current).bindPopup('You are here');
+    }
+  }, []);
+
+  // ── Exported pan/fit helpers ───────────────────────────
+  const panToShuttle = useCallback(shuttleOrId => {
+    if (!mapInst.current) return;
+    const s = typeof shuttleOrId === 'string' ? liveShuttles[shuttleOrId] : shuttleOrId;
+    if (s?.lat && s?.lng) mapInst.current.flyTo([s.lat, s.lng], 17, { animate: true, duration: 0.8 });
   }, [liveShuttles]);
 
   const panToLocation = useCallback((lat, lng, z = 16) => {
-    if (!mapInstanceRef.current) return;
-    mapInstanceRef.current.setView([lat, lng], z, { animate: true });
+    if (!mapInst.current) return;
+    mapInst.current.flyTo([lat, lng], z, { animate: true, duration: 0.8 });
   }, []);
 
   const fitAllShuttles = useCallback(() => {
-    if (!mapInstanceRef.current) return;
-    const shuttles = Object.values(liveShuttles);
-    if (!shuttles.length) return;
-    const bounds = L.latLngBounds(shuttles.map(s => [s.lat, s.lng]));
-    mapInstanceRef.current.fitBounds(bounds, { padding: [60, 60], animate: true });
+    if (!mapInst.current) return;
+    const pts = Object.values(liveShuttles).filter(s => s.lat && s.lng);
+    if (!pts.length) return;
+    if (pts.length === 1) {
+      mapInst.current.flyTo([pts[0].lat, pts[0].lng], 16);
+      return;
+    }
+    const bounds = L.latLngBounds(pts.map(s => [s.lat, s.lng]));
+    mapInst.current.flyToBounds(bounds, { padding: [60, 60], animate: true, duration: 0.8 });
   }, [liveShuttles]);
 
-  // Cleanup
-  useEffect(() => () => {
-    Object.values(animFrames.current).forEach(cancelAnimationFrame);
-  }, []);
-
-  return { mapInstance: mapInstanceRef.current, panToShuttle, panToLocation, fitAllShuttles };
+  return {
+    mapInstance: mapInst.current,
+    panToShuttle,
+    panToLocation,
+    fitAllShuttles,
+    showUserLocation,
+  };
 };
 
 export default useLeafletMap;

@@ -1,118 +1,135 @@
+'use strict';
+/**
+ * server.js — ShuttliX v2.0
+ * Security: helmet, cors whitelist, mongo-sanitize, compression,
+ * request IDs, structured logging, rate limits, graceful shutdown.
+ */
 require('dotenv').config();
-const express    = require('express');
-const http       = require('http');
-const cors       = require('cors');
-const helmet     = require('helmet');
-const morgan     = require('morgan');
-const rateLimit  = require('express-rate-limit');
+require('./config/env'); // Validate env vars first
 
-const connectDB         = require('./config/db');
-const { connectRedis }  = require('./config/redis');
-const { initSocket }    = require('./config/socket');
+const express        = require('express');
+const http           = require('http');
+const cors           = require('cors');
+const helmet         = require('helmet');
+const compression    = require('compression');
+const mongoSanitize  = require('express-mongo-sanitize');
+const rateLimit      = require('express-rate-limit');
+const { v4: uuid }   = require('uuid');
+const logger         = require('./utils/logger');
+const connectDB      = require('./config/db');
+const redis          = require('./config/redis');
+const { initSocket } = require('./config/socket');
 
-// ── Routes ────────────────────────────────────────────────
-const authRoutes    = require('./routes/auth');
-const adminRoutes   = require('./routes/admin');
-const {
-  studentRouter,
-  driverRouter,
-  publicRouter,
-  chatRouter,
-  shuttleRouter,
-  routeListRouter,
-  checkinRouter,
-} = require('./routes/combined');
-
-// ── App ───────────────────────────────────────────────────
 const app    = express();
 const server = http.createServer(app);
 
-// Required for Render and all reverse-proxy deployments
-app.set('trust proxy', 1);
+const ALLOWED_ORIGINS = (process.env.CLIENT_URLS || 'http://localhost:5173')
+  .split(',').map(s => s.trim());
 
-// ── Connect databases ─────────────────────────────────────
-connectDB();
-connectRedis();
-
-// ── Security middleware ───────────────────────────────────
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
+// ── Security headers ──────────────────────────────────────
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'"],
+      styleSrc:   ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
+      imgSrc:     ["'self'", 'data:', 'https://*.cartocdn.com', 'https://unpkg.com'],
+      connectSrc: ["'self'", ...ALLOWED_ORIGINS, 'wss:', 'ws:'],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
 }));
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
-if (process.env.NODE_ENV === 'development') app.use(morgan('dev'));
 
-// ── Rate limiters ─────────────────────────────────────────
-const makeLimit = (windowMs, max, message) =>
-  rateLimit({ windowMs, max, message: { success: false, message }, standardHeaders: true, legacyHeaders: false });
+// ── CORS ──────────────────────────────────────────────────
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: ${origin} not allowed`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+  exposedHeaders: ['X-Request-ID'],
+}));
 
-app.use('/api',                   makeLimit(15 * 60 * 1000, 300, 'Too many requests'));
-app.use('/api/auth/login',        makeLimit(15 * 60 * 1000, 10,  'Too many login attempts'));
-app.use('/api/auth/send-otp',     makeLimit(60 * 60 * 1000, 5,   'Too many OTP requests'));
-app.use('/api/auth/forgot-password', makeLimit(60 * 60 * 1000, 5, 'Too many reset requests'));
+app.use(compression({ threshold: 1024 }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(mongoSanitize({ replaceWith: '_' }));
 
-// ── API Routes ────────────────────────────────────────────
-app.use('/api/auth',     authRoutes);
-app.use('/api/admin',    adminRoutes);
-app.use('/api/student',  studentRouter);
-app.use('/api/driver',   driverRouter);
-app.use('/api/public',   publicRouter);
-app.use('/api/chat',     chatRouter);
-app.use('/api/shuttles', shuttleRouter);
-app.use('/api/routes',   routeListRouter);
-app.use('/api/checkin',  checkinRouter);
-
-// ── Health check ──────────────────────────────────────────
-app.get('/api/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'ShutliX API v2 running',
-    env: process.env.NODE_ENV,
-    time: new Date().toISOString(),
-  });
+// ── Request ID ────────────────────────────────────────────
+app.use((req, res, next) => {
+  const id = req.headers['x-request-id'] || uuid();
+  req.requestId = id;
+  res.setHeader('X-Request-ID', id);
+  next();
 });
 
-// ── 404 ───────────────────────────────────────────────────
-app.use((req, res) =>
-  res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` })
+// ── Structured request logging ────────────────────────────
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => logger.http({
+    method: req.method, url: req.originalUrl,
+    status: res.statusCode, ms: Date.now() - start,
+    requestId: req.requestId,
+  }));
+  next();
+});
+
+// ── Rate limits ───────────────────────────────────────────
+const limiter = (max, windowMin = 15) => rateLimit({
+  windowMs: windowMin * 60 * 1000, max,
+  standardHeaders: true, legacyHeaders: false,
+  message: { success: false, message: 'Too many requests — slow down.' },
+});
+app.use('/api/auth',    limiter(30, 15));  // 30 auth per 15 min
+app.use('/api',         limiter(500, 15)); // 500 general per 15 min
+
+// ── Health ────────────────────────────────────────────────
+app.get('/api/health', (_req, res) =>
+  res.json({ status: 'ok', version: '2.0.0', ts: new Date().toISOString() })
 );
 
+// ── Routes ────────────────────────────────────────────────
+app.use('/api/auth',    require('./routes/auth'));
+app.use('/api/admin',   require('./routes/admin'));
+app.use('/api/driver',  require('./routes/driver'));
+app.use('/api/student', require('./routes/student'));
+app.use('/api/public',  require('./routes/public'));
+app.use('/api',         require('./routes/combined'));
+
+// ── 404 ───────────────────────────────────────────────────
+app.use((_req, res) => res.status(404).json({ success: false, message: 'Not found' }));
+
 // ── Global error handler ──────────────────────────────────
-app.use((err, req, res, next) => {
-  console.error('❌', err.message);
-  if (err.name === 'ValidationError') {
-    const msg = Object.values(err.errors).map(e => e.message).join(', ');
-    return res.status(400).json({ success: false, message: msg });
-  }
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyValue)[0];
-    return res.status(409).json({ success: false, message: `${field} already exists` });
-  }
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({ success: false, message: 'Invalid token' });
-  }
-  if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({ success: false, message: 'Token expired' });
-  }
-  res.status(err.statusCode || 500).json({
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  const status = err.statusCode || err.status || 500;
+  logger.error({ err, requestId: req.requestId });
+  res.status(status).json({
     success: false,
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    message: status < 500 ? err.message : 'Internal server error',
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
   });
 });
 
-// ── WebSocket ─────────────────────────────────────────────
-initSocket(server);
+process.on('unhandledRejection', r => logger.error({ msg: 'Unhandled rejection', r }));
+process.on('uncaughtException',  e => { logger.error({ msg: 'Uncaught exception', e }); process.exit(1); });
 
-// ── Start ─────────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`\n🚌 ShutliX v2 running on port ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
-  console.log(`📡 WebSocket ready`);
-  console.log(`🔗 Health: http://localhost:${PORT}/api/health\n`);
-});
+(async () => {
+  await connectDB();
+  await redis();
+  initSocket(server);
+  server.listen(PORT, () => logger.info({ msg: 'ShuttliX v2.0 running', port: PORT }));
+})();
 
-module.exports = { app, server };
+// ── Graceful shutdown ─────────────────────────────────────
+const shutdown = sig => {
+  logger.info(`${sig} — shutting down`);
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 10_000);
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
