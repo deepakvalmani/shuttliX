@@ -22,12 +22,27 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-// CartoDB tiles — dark & light variants (free, no API key)
-const TILES = {
-  dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+// Multiple tile options for better visuals
+const TILE_STYLES = {
+  // CartoDB options
+  cartoDark:   'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  cartoLight:  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  cartoVoyager: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  cartoVoyagerNoLabels: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+  // Esri options (satellite, streets)
+  esriSatellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  esriStreets: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+  // OpenStreetMap
+  osm: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
 };
-const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+// Default tiles (theme-aware)
+const TILES = {
+  dark:  TILE_STYLES.cartoDark,
+  light: TILE_STYLES.cartoLight,
+};
+
+const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a> &copy; Esri';
 
 const ANIMATION_DURATION = 1800;
 
@@ -76,6 +91,7 @@ const useLeafletMap = ({
   const animFrames     = useRef({});
   const stopMarkersRef = useRef([]);
   const polylineRefs   = useRef([]);
+  const animationFrameRef = useRef(null);
   const currentThemeRef = useRef(getResolvedTheme());
 
   // ── INIT MAP ──────────────────────────────────────────────
@@ -140,21 +156,41 @@ const useLeafletMap = ({
 
       const color = route.color || '#1A56DB';
 
-      // Glow line
+      // Glow line (outer)
       const glow = L.polyline(path, {
         color,
-        weight: 10,
-        opacity: 0.15,
+        weight: 12,
+        opacity: 0.1,
       }).addTo(mapInstanceRef.current);
 
       // Main line
       const main = L.polyline(path, {
         color,
-        weight: 3,
-        opacity: 0.75,
+        weight: 4,
+        opacity: 0.9,
+        dashArray: null,
       }).addTo(mapInstanceRef.current);
 
-      polylineRefs.current.push(glow, main);
+      // Animated dashed overlay
+      const animated = L.polyline(path, {
+        color: color,
+        weight: 2,
+        opacity: 0.6,
+        dashArray: '10, 10',
+        lineCap: 'round',
+        lineJoin: 'round',
+      }).addTo(mapInstanceRef.current);
+
+      // Animate the dash offset
+      let dashOffset = 0;
+      const animateDash = () => {
+        dashOffset -= 1;
+        animated.setStyle({ dashOffset: dashOffset });
+        animationFrameRef.current = requestAnimationFrame(animateDash);
+      };
+      animationFrameRef.current = requestAnimationFrame(animateDash);
+
+      polylineRefs.current.push(glow, main, animated);
     });
   }, [routes, mapInstanceRef.current]);
 
@@ -290,9 +326,35 @@ const useLeafletMap = ({
   // Cleanup
   useEffect(() => () => {
     Object.values(animFrames.current).forEach(cancelAnimationFrame);
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
   }, []);
 
-  return { mapInstance: mapInstanceRef.current, panToShuttle, panToLocation, fitAllShuttles };
+  // ── MAP CONTROLS ─────────────────────────────────────────
+  const toggleFullscreen = useCallback(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const container = map.getContainer();
+    
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      container.requestFullscreen();
+    }
+  }, []);
+
+  const setTileLayer = useCallback((style) => {
+    if (!tileLayerRef.current || !TILE_STYLES[style]) return;
+    tileLayerRef.current.setUrl(TILE_STYLES[style]);
+  }, []);
+
+  return { 
+    mapInstance: mapInstanceRef.current, 
+    panToShuttle, 
+    panToLocation, 
+    fitAllShuttles,
+    toggleFullscreen,
+    setTileLayer,
+  };
 };
 
 export default useLeafletMap;

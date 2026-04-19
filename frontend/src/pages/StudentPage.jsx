@@ -258,7 +258,7 @@ const StudentPage = () => {
   );
   const [showReport, setShowReport] = useState(false);
 
-  const { panToShuttle, panToLocation, fitAllShuttles } = useLeafletMap({
+  const { panToShuttle, panToLocation, fitAllShuttles, toggleFullscreen, setTileLayer } = useLeafletMap({
     mapRef,
     center: { lat: 24.9056, lng: 67.0822 },
     zoom: 14,
@@ -268,6 +268,14 @@ const StudentPage = () => {
     onShuttleClick: shuttle => selectShuttle(shuttle),
     onStopClick: stop => panToLocation(stop.lat, stop.lng, 17),
   });
+
+  // Tile layer options
+  const [tileStyle, setTileStyle] = useState('cartoDark');
+
+  // Update tile layer when style changes
+  useEffect(() => {
+    setTileLayer(tileStyle);
+  }, [tileStyle, setTileLayer]);
 
   // GPS
   useEffect(() => {
@@ -866,6 +874,34 @@ const StudentPage = () => {
             </div>
           </div>
         )}
+
+        {/* Map controls - layer switcher & fullscreen */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+          {/* Layer switcher */}
+          <div className="relative">
+            <button 
+              onClick={() => setTileStyle(s => {
+                const styles = ['cartoDark', 'cartoLight', 'cartoVoyager', 'esriSatellite'];
+                const idx = styles.indexOf(s);
+                return styles[(idx + 1) % styles.length];
+              })}
+              className="glass rounded-xl p-2 flex items-center gap-2 text-xs"
+              style={{ color: 'var(--text-2)' }}
+              title="Change map style"
+            >
+              <span>🗺️</span>
+            </button>
+          </div>
+          {/* Fullscreen toggle */}
+          <button 
+            onClick={toggleFullscreen}
+            className="glass rounded-xl p-2 flex items-center gap-2 text-xs"
+            style={{ color: 'var(--text-2)' }}
+            title="Toggle fullscreen"
+          >
+            <span>⛶</span>
+          </button>
+        </div>
 
         {/* Map resize toggle - mobile only */}
         <div className="absolute bottom-6 left-4 z-10 lg:hidden">

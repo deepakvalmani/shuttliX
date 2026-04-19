@@ -107,15 +107,29 @@ export const calculateBearing = (lat1, lng1, lat2, lng2) => {
 
 /**
  * Creates a custom SVG shuttle marker icon for Google Maps
+ * Enhanced with pulsing animation for active shuttles
  */
 export const createShuttleMarkerSVG = (heading = 0, color = '#1A56DB', isActive = true, shortCode = '') => {
   const label = shortCode ? shortCode.slice(0, 2) : '';
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="56" height="60" viewBox="0 0 56 60">
+      <!-- Pulsing ring for active shuttles -->
+      ${isActive ? `
+        <circle cx="28" cy="30" r="26" fill="none" stroke="${color}" stroke-width="2" opacity="0.3">
+          <animate attributeName="r" values="22;28;22" dur="1.5s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.5s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="28" cy="30" r="20" fill="none" stroke="${color}" stroke-width="1" opacity="0.2">
+          <animate attributeName="r" values="18;26;18" dur="1.5s" repeatCount="indefinite" begin="0.2s"/>
+          <animate attributeName="opacity" values="0.3;0;0.3" dur="1.5s" repeatCount="indefinite" begin="0.2s"/>
+        </circle>
+      ` : ''}
       <!-- Drop shadow -->
       <ellipse cx="28" cy="57" rx="12" ry="3" fill="rgba(0,0,0,0.3)" />
-      <!-- Bus body -->
-      <rect x="8" y="12" width="40" height="30" rx="6" fill="${color}" />
+      <!-- Bus body with glow -->
+      <rect x="8" y="12" width="40" height="30" rx="6" fill="${color}">
+        ${isActive ? `<animate attributeName="filter" values="none;none;drop-shadow(0 0 8px ${color});none" dur="2s" repeatCount="indefinite"/>` : ''}
+      </rect>
       <!-- Windshield -->
       <rect x="12" y="6" width="32" height="12" rx="4" fill="rgba(255,255,255,0.88)" />
       <!-- Windows row -->
@@ -131,7 +145,7 @@ export const createShuttleMarkerSVG = (heading = 0, color = '#1A56DB', isActive 
         <text x="28" y="37" text-anchor="middle" font-family="Inter,system-ui,sans-serif"
           font-size="10" font-weight="800" fill="white" letter-spacing="1">${label}</text>
       ` : ''}
-      <!-- Live dot -->
+      <!-- Live indicator dot -->
       ${isActive ? `
         <circle cx="48" cy="8" r="6" fill="#10B981" stroke="#0D2137" stroke-width="2" />
         <circle cx="48" cy="8" r="3" fill="white" />
@@ -143,17 +157,32 @@ export const createShuttleMarkerSVG = (heading = 0, color = '#1A56DB', isActive 
 
 /**
  * Creates a custom stop marker SVG
+ * Enhanced with better shadow and glow effects
  */
 export const createStopMarkerSVG = (label = '', color = '#D97706') => {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="36" height="44" viewBox="0 0 36 44">
-      <filter id="drop-shadow">
-        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.3" />
-      </filter>
+      <defs>
+        <filter id="stop-shadow-${label}" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.4" />
+        </filter>
+        <filter id="stop-glow-${label}" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2" result="blur"/>
+          <feMerge>
+            <feMergeNode in="blur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+      <!-- Outer glow ring -->
+      <circle cx="18" cy="18" r="16" fill="none" stroke="${color}" stroke-width="1" opacity="0.2"/>
+      <!-- Main pin shape -->
       <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26S36 31.5 36 18C36 8.06 27.94 0 18 0z"
-        fill="${color}" filter="url(#drop-shadow)" />
+        fill="${color}" filter="url(#stop-shadow-${label})" />
+      <!-- Inner circle -->
       <circle cx="18" cy="18" r="10" fill="rgba(0,0,0,0.2)" />
       <circle cx="18" cy="18" r="8" fill="white" />
+      <!-- Label -->
       <text x="18" y="22" text-anchor="middle" font-family="Inter, sans-serif"
         font-size="9" font-weight="700" fill="${color}">${label}</text>
     </svg>
