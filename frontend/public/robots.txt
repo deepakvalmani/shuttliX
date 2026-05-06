@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://shuttlix-1.onrender.com/sitemap.xml
