@@ -244,6 +244,10 @@ const StudentPage = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [announcements, setAnnouncements] = useState([]);
   const [showMap, setShowMap] = useState(true);
+<<<<<<< HEAD
+=======
+  const [mapHeight, setMapHeight] = useState('50vh'); // Mobile: 50%, 70%, or 100%
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
   const [ratingTrip, setRatingTrip] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -257,7 +261,11 @@ const StudentPage = () => {
   );
   const [showReport, setShowReport] = useState(false);
 
+<<<<<<< HEAD
   const { panToShuttle, panToLocation, fitAllShuttles } = useLeafletMap({
+=======
+  const { panToShuttle, panToLocation, fitAllShuttles, toggleFullscreen, setTileLayer } = useLeafletMap({
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
     mapRef,
     center: { lat: 24.9056, lng: 67.0822 },
     zoom: 14,
@@ -268,6 +276,17 @@ const StudentPage = () => {
     onStopClick: stop => panToLocation(stop.lat, stop.lng, 17),
   });
 
+<<<<<<< HEAD
+=======
+  // Tile layer options
+  const [tileStyle, setTileStyle] = useState('cartoDark');
+
+  // Update tile layer when style changes
+  useEffect(() => {
+    setTileLayer(tileStyle);
+  }, [tileStyle, setTileLayer]);
+
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
   // GPS
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -311,6 +330,15 @@ const StudentPage = () => {
   // Load data
   useEffect(() => { fetchRoutes(); fetchStops(); }, []);
 
+<<<<<<< HEAD
+=======
+  // Debug: log live shuttles changes
+  useEffect(() => {
+    console.log('[DEBUG] liveShuttles updated:', Object.keys(liveShuttles).length, 'shuttles');
+    console.log('[DEBUG] liveShuttles data:', liveShuttles);
+  }, [liveShuttles]);
+
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
   // Load history
   useEffect(() => {
     if (activeTab !== 'history' || rideHistory.length) return;
@@ -734,7 +762,11 @@ const StudentPage = () => {
       </div>
 
       {/* ── MAP AREA ─────────────────────────────────────── */}
+<<<<<<< HEAD
       <div className={`flex-1 relative ${showMap ? 'flex' : 'hidden lg:flex'} flex-col`}>
+=======
+      <div className={`flex-1 relative ${showMap ? 'flex' : 'hidden lg:flex'} flex-col lg:h-auto`} style={{ height: mapHeight }}>
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
 
         {/* Back button */}
         <div className="absolute top-4 left-4 z-20 lg:hidden">
@@ -860,7 +892,50 @@ const StudentPage = () => {
           </div>
         )}
 
+<<<<<<< HEAD
         <div ref={mapRef} className="w-full h-full" onClick={() => setShowSearchResults(false)} />
+=======
+        {/* Map controls - layer switcher & fullscreen */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+          {/* Layer switcher */}
+          <div className="relative">
+            <button 
+              onClick={() => setTileStyle(s => {
+                const styles = ['cartoDark', 'cartoLight', 'cartoVoyager', 'esriSatellite'];
+                const idx = styles.indexOf(s);
+                return styles[(idx + 1) % styles.length];
+              })}
+              className="glass rounded-xl p-2 flex items-center gap-2 text-xs"
+              style={{ color: 'var(--text-2)' }}
+              title="Change map style"
+            >
+              <span>🗺️</span>
+            </button>
+          </div>
+          {/* Fullscreen toggle */}
+          <button 
+            onClick={toggleFullscreen}
+            className="glass rounded-xl p-2 flex items-center gap-2 text-xs"
+            style={{ color: 'var(--text-2)' }}
+            title="Toggle fullscreen"
+          >
+            <span>⛶</span>
+          </button>
+        </div>
+
+        {/* Map resize toggle - mobile only */}
+        <div className="absolute bottom-6 left-4 z-10 lg:hidden">
+          <button 
+            onClick={() => setMapHeight(h => h === '50vh' ? '70vh' : h === '70vh' ? '100vh' : '50vh')}
+            className="glass rounded-xl px-3 py-2 text-xs flex items-center gap-2"
+            style={{ color: 'var(--text-2)' }}
+          >
+            <span>⬆</span> {mapHeight === '50vh' ? 'Expand' : mapHeight === '70vh' ? 'More' : 'Collapse'}
+          </button>
+        </div>
+
+        <div ref={mapRef} className="w-full h-full min-h-0" onClick={() => setShowSearchResults(false)} />
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
       </div>
 
       {ratingTrip && (

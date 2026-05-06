@@ -12,6 +12,10 @@ import {
   interpolatePosition,
   calculateBearing,
   getCapacityStatus,
+<<<<<<< HEAD
+=======
+  fetchRoadRoute,
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
 } from '../services/maps';
 
 // Fix Leaflet's broken default icon path in Vite
@@ -22,12 +26,36 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
+<<<<<<< HEAD
 // CartoDB tiles — dark & light variants (free, no API key)
 const TILES = {
   dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
   light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
 };
 const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+=======
+// Multiple tile options for better visuals
+const TILE_STYLES = {
+  // CartoDB options
+  cartoDark:   'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  cartoLight:  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  cartoVoyager: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  cartoVoyagerNoLabels: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+  // Esri options (satellite, streets)
+  esriSatellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  esriStreets: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+  // OpenStreetMap
+  osm: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+};
+
+// Default tiles (theme-aware)
+const TILES = {
+  dark:  TILE_STYLES.cartoDark,
+  light: TILE_STYLES.cartoLight,
+};
+
+const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a> &copy; Esri';
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
 
 const ANIMATION_DURATION = 1800;
 
@@ -76,7 +104,13 @@ const useLeafletMap = ({
   const animFrames     = useRef({});
   const stopMarkersRef = useRef([]);
   const polylineRefs   = useRef([]);
+<<<<<<< HEAD
   const currentThemeRef = useRef(getResolvedTheme());
+=======
+  const animationFrameRef = useRef(null);
+  const currentThemeRef = useRef(getResolvedTheme());
+  const roadPathsRef = useRef({}); // Cache for road paths
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
 
   // ── INIT MAP ──────────────────────────────────────────────
   useEffect(() => {
@@ -127,6 +161,7 @@ const useLeafletMap = ({
     polylineRefs.current.forEach(p => p.remove());
     polylineRefs.current = [];
 
+<<<<<<< HEAD
     routes.forEach(route => {
       const path = route.pathCoordinates?.length
         ? route.pathCoordinates.map(c => [c.lat, c.lng])
@@ -156,6 +191,100 @@ const useLeafletMap = ({
 
       polylineRefs.current.push(glow, main);
     });
+=======
+    // Stop any existing animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    const drawRouteWithRoadPath = async () => {
+      for (const route of routes) {
+        const stops = route.stops || [];
+        if (stops.length < 2) continue;
+
+        const color = route.color || '#1A56DB';
+        const routeKey = route._id || route.name;
+
+        // Check cache first
+        let path = roadPathsRef.current[routeKey];
+        
+        if (!path) {
+          // Fetch road paths between all stops
+          const allPoints = [];
+          for (let i = 0; i < stops.length - 1; i++) {
+            const from = stops[i];
+            const to = stops[i + 1];
+            
+            const lat1 = from.stopId?.lat || from.lat;
+            const lng1 = from.stopId?.lng || from.lng;
+            const lat2 = to.stopId?.lat || to.lat;
+            const lng2 = to.stopId?.lng || to.lng;
+            
+            if (lat1 && lng1 && lat2 && lng2) {
+              const roadPath = await fetchRoadRoute(lat1, lng1, lat2, lng2);
+              if (roadPath && roadPath.length > 0) {
+                allPoints.push(...roadPath);
+              } else {
+                // Fallback to straight line
+                allPoints.push([lat1, lng1], [lat2, lng2]);
+              }
+            }
+          }
+          path = allPoints;
+          if (path.length > 0) {
+            roadPathsRef.current[routeKey] = path;
+          }
+        }
+
+        if (path.length < 2) continue;
+
+        // Glow line (outer)
+        const glow = L.polyline(path, {
+          color,
+          weight: 12,
+          opacity: 0.1,
+        }).addTo(mapInstanceRef.current);
+
+        // Main line
+        const main = L.polyline(path, {
+          color,
+          weight: 4,
+          opacity: 0.9,
+          dashArray: null,
+        }).addTo(mapInstanceRef.current);
+
+        // Animated dashed overlay
+        const animated = L.polyline(path, {
+          color: color,
+          weight: 2,
+          opacity: 0.6,
+          dashArray: '10, 10',
+          lineCap: 'round',
+          lineJoin: 'round',
+        }).addTo(mapInstanceRef.current);
+
+        polylineRefs.current.push(glow, main, animated);
+      }
+
+      // Start dash animation after all routes are drawn
+      if (polylineRefs.current.length > 0) {
+        let dashOffset = 0;
+        const animateDash = () => {
+          dashOffset -= 1;
+          polylineRefs.current.forEach((p, idx) => {
+            // Only animate the dashed lines (every 3rd one)
+            if (idx % 3 === 2) {
+              p.setStyle({ dashOffset: dashOffset });
+            }
+          });
+          animationFrameRef.current = requestAnimationFrame(animateDash);
+        };
+        animationFrameRef.current = requestAnimationFrame(animateDash);
+      }
+    };
+
+    drawRouteWithRoadPath();
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
   }, [routes, mapInstanceRef.current]);
 
   // ── DRAW STOP MARKERS ─────────────────────────────────────
@@ -290,9 +419,41 @@ const useLeafletMap = ({
   // Cleanup
   useEffect(() => () => {
     Object.values(animFrames.current).forEach(cancelAnimationFrame);
+<<<<<<< HEAD
   }, []);
 
   return { mapInstance: mapInstanceRef.current, panToShuttle, panToLocation, fitAllShuttles };
+=======
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+  }, []);
+
+  // ── MAP CONTROLS ─────────────────────────────────────────
+  const toggleFullscreen = useCallback(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const container = map.getContainer();
+    
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      container.requestFullscreen();
+    }
+  }, []);
+
+  const setTileLayer = useCallback((style) => {
+    if (!tileLayerRef.current || !TILE_STYLES[style]) return;
+    tileLayerRef.current.setUrl(TILE_STYLES[style]);
+  }, []);
+
+  return { 
+    mapInstance: mapInstanceRef.current, 
+    panToShuttle, 
+    panToLocation, 
+    fitAllShuttles,
+    toggleFullscreen,
+    setTileLayer,
+  };
+>>>>>>> 261833daad1a5389c79dc94868d300bf6a49a123
 };
 
 export default useLeafletMap;
